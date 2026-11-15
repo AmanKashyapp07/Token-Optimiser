@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from gateway.core.config import get_settings
 from gateway.core.providers import Provider
 from gateway.core.store import Store
+from gateway.features.cache.coalescing import get_request_coalescer
 from gateway.features.cache.redis_index import RedisExactIndex
 from gateway.features.cache.settings import CacheSettings, get_cache_settings
 from gateway.modules.m12_semantic.embeddings import SemanticEmbedder
@@ -79,6 +80,13 @@ class CacheEntryInput(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
     answer: str = Field(min_length=1, max_length=6000)
     language: str = Field(default="auto", max_length=32)
+
+
+class CacheInvalidateRequest(BaseModel):
+    scope: str = "public"
+    pattern: str | None = None
+    version: str | None = None
+    purge_all: bool = False
 
 
 DEMO_FAQS = [
@@ -397,8 +405,18 @@ def _add_cache_entry(
 
 
 @router.post("/lookup")
-def lookup(request: CacheLookup, cache_scope: str = Header(default="public", alias="X-Cache-Scope")):
-    return _lookup(request.text, request.language, cache_scope)
+async def lookup(request: CacheLookup, cache_scope: str = Header(default="public", alias="X-Cache-Scope")):
+    valid_scope = _validated_scope(cache_scope)
+    coalescer = get_request_coalescer()
+    coalesce_key = f"{valid_scope}:{normalize(request.text)}"
+
+    async def _do():
+        return _lookup(request.text, request.language, valid_scope)
+
+    res, coalesced = await coalescer.do(coalesce_key, _do)
+    if coalesced and isinstance(res, dict):
+        return {**res, "coalesced": True}
+    return res
 
 
 @router.post("/answer")
@@ -549,6 +567,47 @@ def clear_entries(cache_scope: str = Header(default="public", alias="X-Cache-Sco
     for row in rows:
         hot.delete(cache_scope, row[1])
     return {"deleted": len(rows)}
+
+
+@router.post("/invalidate")
+def invalidate_cache(
+    request: CacheInvalidateRequest,
+    cache_scope: str = Header(default="public", alias="X-Cache-Scope"),
+):
+    """Targeted cache invalidation by keyword pattern, scope, or version."""
+    target_scope = _validated_scope(request.scope or cache_scope)
+    settings = get_settings()
+    with sqlite3.connect(settings.database_path) as db:
+        query = (
+            "select e.id, e.normalized from cache_entries e "
+            "join cache_entry_runtime r on r.entry_id=e.id where r.scope_id = ?"
+        )
+        params: list[Any] = [target_scope]
+        if request.pattern and not request.purge_all:
+            query += " and (e.question like ? or e.normalized like ?)"
+            pat = f"%{request.pattern.lower().strip()}%"
+            params.extend([pat, pat])
+        if request.version and not request.purge_all:
+            query += " and r.embedding_version = ?"
+            params.append(request.version)
+
+        rows = db.execute(query, params).fetchall()
+        if rows:
+            placeholders = ",".join("?" for _ in rows)
+            ids = [row[0] for row in rows]
+            db.execute(f"delete from cache_entries where id in ({placeholders})", ids)
+            db.execute(f"delete from cache_entry_runtime where entry_id in ({placeholders})", ids)
+
+    hot = _hot_index()
+    for row in rows:
+        hot.delete(target_scope, row[1])
+
+    return {
+        "invalidated": len(rows),
+        "scope": target_scope,
+        "pattern": request.pattern,
+        "version": request.version,
+    }
 
 
 @router.get("/stats")

@@ -1,8 +1,52 @@
 from __future__ import annotations
 
+import asyncio
+import random
 import time
 from enum import Enum
 from typing import Any, Callable
+
+
+class TimeoutContext:
+    """Manages and enforces deadlines across multi-stage pipeline executions."""
+
+    def __init__(self, timeout_seconds: float = 10.0):
+        self.timeout = timeout_seconds
+        self.start_time = time.perf_counter()
+        self.deadline = self.start_time + timeout_seconds
+
+    def elapsed_ms(self) -> float:
+        return (time.perf_counter() - self.start_time) * 1000
+
+    def remaining_seconds(self) -> float:
+        rem = self.deadline - time.perf_counter()
+        if rem <= 0:
+            raise TimeoutError(f"Request exceeded maximum SLA timeout of {self.timeout}s")
+        return rem
+
+
+async def async_retry_with_backoff(
+    coro_fn: Callable[..., Any],
+    retries: int = 2,
+    base_delay: float = 0.1,
+    max_delay: float = 1.0,
+    jitter: bool = True,
+    retry_exceptions: tuple = (Exception,),
+) -> Any:
+    """Executes an async callable with exponential backoff and randomized jitter."""
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            return await coro_fn()
+        except retry_exceptions as exc:
+            last_err = exc
+            if attempt == retries:
+                break
+            delay = min(max_delay, base_delay * (2 ** attempt))
+            if jitter:
+                delay = delay * (0.5 + random.random() * 0.5)
+            await asyncio.sleep(delay)
+    raise last_err
 
 
 class CircuitState(str, Enum):
