@@ -1,162 +1,273 @@
-# ⚡ Token Optimiser — High-Performance LLM Gateway & Analytics
+# Token Optimiser
 
-[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8+-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![React](https://img.shields.io/badge/React-19.0-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
-[![Vite](https://img.shields.io/badge/Vite-6.3-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev)
-[![Tests](https://img.shields.io/badge/Tests-214%20Passing-10b981?style=for-the-badge&logo=pytest&logoColor=white)](scripts/run_all_tests.py)
+### High-Performance LLM Gateway and Analytics Workbench
 
-> **An intelligent, cost-aware AI Gateway and Analytics Workbench engineered to minimize LLM inference costs and latency across English, Hinglish, and Hindi workloads.**  
-> Built with a CPU-first, deterministic pipeline featuring prompt compression, semantic caching, difficulty-aware model routing, output-capping constraint engineering, and statistical ML analytics.
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8+-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![React](https://img.shields.io/badge/React-19.0-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-6.3-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev)
+[![Tests](https://img.shields.io/badge/Tests-214%20Passing-10b981?style=flat-square&logo=pytest&logoColor=white)](scripts/run_all_tests.py)
 
----
+**Prompt Compression** • **Semantic Caching** • **Difficulty-Aware Routing** • **Output Capping** • **Multilingual Token Analytics**
 
-## 🎯 The Engineering Problem
-
-Modern enterprise applications querying commercial Large Language Models (LLMs) face three major cost and latency bottlenecks:
-
-1. **The Output Cost Asymmetry:**  
-   LLM providers (OpenAI, Groq, Anthropic) price completion tokens at **3× to 4× higher rates** than prompt tokens. Unconstrained models generate verbose, multi-paragraph answers when users only need structured or concise data.
-2. **The "Token Tax" on Indic Languages:**  
-   Standard Byte-Pair Encoding (BPE) vocabularies (e.g., `cl100k_base`) were trained predominantly on English corpora. In Hindi (Devanagari) and code-mixed Hinglish, words fragment into multiple byte tokens, inflating token usage by **1.8× to 2.5×** for the exact same semantic intent.
-3. **Redundant Inference Spend:**  
-   Common institutional queries are repeatedly re-sent to expensive frontier models instead of being intercepted by semantic memory.
+[View Repository](https://github.com/AmanKashyapp07/Token-Optimiser) · [Report Issue](https://github.com/AmanKashyapp07/Token-Optimiser/issues) · [Presentation Guide](PRESENTATION.md)
 
 ---
 
-## 🏗️ System Architecture
+**Token Optimiser** is a cost-aware AI gateway that reduces LLM inference cost and latency across English, Hinglish, and Hindi workloads. It sits between an application and downstream providers, running every request through a deterministic, CPU-only pipeline: semantic cache lookup, prompt compression, difficulty-aware model routing, and output capping with cost analytics.
 
-The gateway acts as an intelligent middleware proxy intercepting requests before they reach downstream LLMs:
+A companion workbench exposes the same pipeline interactively, complete with a multilingual token tax inspector, a financial cost engine, and statistical machine learning analytics (Ridge Regression, PCA, K-Means) over live request traffic.
+
+---
+
+## Why I Built This
+
+Commercial LLM usage carries three avoidable overheads: verbose completions, tokenizer penalty on Indic text, and repeated calls for identical questions. I built Token Optimiser to measure each of these bottlenecks and eliminate them without needing a GPU cluster or paid external infrastructure.
+
+- **Lower Output Spend:** Completion tokens cost **3× to 4× more** than prompt tokens. Constraining output length yields the highest financial leverage in the system.
+- **Fair Multilingual Cost:** Hindi and Hinglish text fragments into **1.8× to 2.5× more tokens** than equivalent English. The inspector makes that gap transparent and quantifiable.
+- **No Redundant Inference:** Repeated institutional queries are answered from semantic memory in **< 10 ms at $0.00 inference cost**.
+- **Deterministic and CPU-First:** Every pipeline stage runs locally on CPU and behaves predictably, keeping results testable, reproducible, and cost-free.
+
+---
+
+## Table of Contents
+
+- [Core Capabilities](#core-capabilities)
+- [Tech Stack](#tech-stack)
+- [System Architecture](#system-architecture)
+- [Deep-Dive Engineering Highlights](#deep-dive-engineering-highlights)
+  * [1. Output Capping and Constraint Engineering](#1-output-capping-and-constraint-engineering)
+  * [2. Multilingual Token Tax Analysis](#2-multilingual-token-tax-analysis)
+  * [3. Two-Tier Semantic Cache](#3-two-tier-semantic-cache)
+  * [4. Policy-Aware Model Routing](#4-policy-aware-model-routing)
+  * [5. Statistical ML Analytics on CPU](#5-statistical-ml-analytics-on-cpu)
+- [Benchmarks](#benchmarks)
+- [Getting Started](#getting-started)
+- [Testing & Quality Assurance](#testing--quality-assurance)
+- [Presentation & Interview Guide](#presentation--interview-guide)
+
+---
+
+## Core Capabilities
+
+### 1. Output Capping & Constraint Engineering
+Layered soft format constraints (`3 bullets`, `JSON only`, `no preamble`) combined with hard `max_tokens` ceilings reduce completion tokens by **55% to 83%**.
+
+### 2. Multilingual Token Tax Inspector
+Side-by-side comparative analysis of Romanized English, code-mixed Hinglish, and native Devanagari Hindi—reporting character count, token count, tokens per character, and code-mixing ratios.
+
+### 3. Dual-Tier Semantic Cache
+Exact normalized string matching backed by vector embedding cosine similarity. Verified answers return in **under 10 ms at $0.00 inference spend**.
+
+### 4. Prompt Compression
+A lexical and CRF-based compressor shortens prompts while strictly preserving protected literals such as URLs, email addresses, and currency amounts.
+
+### 5. Policy-Aware Routing
+Dynamically routes queries between an **Economy Tier** (20B small model) and a **Quality Tier** (120B frontier model) under user-selected policies (`Economy`, `Balanced`, `Quality`).
+
+### 6. Statistical ML Analytics
+Lightweight supervised Ridge Regression predicts expected completion lengths, while 2D PCA with K-Means ($k=3$) automatically segments traffic into interpretable behavioral profiles.
+
+---
+
+## Tech Stack
+
+| Layer | Technologies | Key Highlights |
+| :--- | :--- | :--- |
+| **Backend** | Python 3.11, FastAPI, Pydantic v2 | High-concurrency async REST API gateway |
+| **ML & Algorithms** | scikit-learn, NumPy, tiktoken | Ridge regression, PCA, K-Means, BPE tokenization |
+| **Storage** | SQLite (WAL mode), JSON fixtures | ACID-compliant transaction logs & curated benchmarks |
+| **Frontend** | React 19, TypeScript 5.8, Vite 6 | Strict type-safety, component modularity |
+| **Visualization** | Tailwind CSS v4, Recharts 2.15, Lucide | Responsive UI, interactive SVG charts & scatter plots |
+| **Testing** | Pytest, Vitest, Ruff | 214 automated unit, integration, and stress tests |
+
+---
+
+## System Architecture
+
+### Request Lifecycle Pipeline
 
 ```mermaid
 flowchart LR
-    User([User Request]) --> Gateway[Unified AI Gateway Proxy]
+    User([User Request]) --> Gateway[Gateway Proxy]
 
     subgraph Pipeline["4-Stage Optimization Pipeline"]
         direction TB
-        S1["1. Semantic Memory & Cache\n(Exact & Embedding Cosine Search)"]
-        S2["2. Lexical & CRF Compressor\n(Heuristic & Protected Spans)"]
-        S3["3. Smart Difficulty Router\n(Logistic Regression / Random Forest / MLP)"]
-        S4["4. Output Capping & Cost Analytics\n(Format Constraints & max_tokens Bounds)"]
-
-        S1 -- "Cache Miss" --> S2
-        S2 --> S3
-        S3 --> S4
+        S1["1. Semantic Cache<br/>Exact normalized match + embedding cosine search"]
+        S2["2. Prompt Compression<br/>Lexical + CRF, protected span preservation"]
+        S3["3. Difficulty Router<br/>Logistic Regression / Random Forest / MLP"]
+        S4["4. Output Capping & Analytics<br/>Format constraints, max_tokens, cost engine"]
+        S1 -- "Cache Miss" --> S2 --> S3 --> S4
     end
 
     Gateway --> S1
-    S1 -- "Cache Hit (5ms, $0)" --> Out([Optimized Response])
+    S1 -- "Cache Hit (< 10 ms, $0)" --> Out([Optimized Response])
     S4 --> Store[(SQLite Audit Store)]
-    S4 --> Dispatch[LLM Inference / Provider Dispatch]
+    S4 --> Dispatch[Provider Dispatch]
     Dispatch --> Out
 ```
 
 ---
 
-## 🚀 Key Features & Technical Highlights
+## Deep-Dive Engineering Highlights
 
-### 1. Dynamic Output Capping & Constraint Engineering (Core Ownership)
-- **High Financial Leverage:** Enforces output-capping strategies (`"3 bullets"`, `"JSON only"`, `"no preamble"`, and `max_tokens` boundaries) that cut expensive completion tokens by **55% to 83%**.
-- **Hard vs. Soft Bounds:** Combines soft semantic constraints (ensuring full thought coherence) with hard token limits (preventing runaway token consumption).
+### 1. Output Capping and Constraint Engineering
 
-### 2. Multilingual Token Tax Inspector
-- Real-time side-by-side analysis of Romanized English, code-mixed Hinglish, and native Devanagari Hindi.
-- Computes character counts, token density, **tokens-per-character**, and **code-mixing ratios** to mathematically expose tokenizer bias.
+```
+[Prompt] ──► [Soft constraint: "3 bullets" / "JSON only" / "no preamble"]
+                          │
+                          ▼
+             [Hard ceiling: max_tokens bound] ──► [Bounded completion]
+```
 
-### 3. Applied Machine Learning on CPU
-- **Supervised Ridge Regression ($R^2 \approx 0.84$, $\text{MAE} \approx 6\text{ tokens}$):** Predicts expected output token lengths based on input length, language script, format constraints, and token bounds. Feature weights reveal negative coefficients for format instructions.
-- **Unsupervised 2D PCA & K-Means ($k=3$):** Dimensionality reduction projecting 6 request features (input tokens, output tokens, code-mixing ratio, cache status, compression flag, routing tier) down to 2 principal components, automatically grouping traffic into *Compact/Capped*, *Standard Multilingual*, and *High-Detail Quality* profiles.
+#### The Problem: Output Cost Asymmetry
+Providers price completion tokens **3× to 4× higher** than prompt tokens. Unconstrained models return multi-paragraph answers when the user only needed concise or structured data, causing the vast majority of infrastructure spend to go toward the most expensive token class.
 
-### 4. Zero-Cost Semantic Cache
-- Dual-tier lookup: $O(1)$ exact normalized string match backed by an offline hash and vector embeddings for semantic similarity search.
-- Returns verified FAQ answers in **< 10ms for $0.00 infrastructure cost**.
+#### The Solution: Layered Soft and Hard Bounds
+- **Soft constraints** steer the completion structure (`3 bullets`, `JSON only`, `no preamble`) so the model finishes a complete, coherent thought within a tight token budget.
+- **Hard ceilings** (`max_tokens`) guarantee that runaway generations can never exceed the designated boundary.
 
-### 5. Policy-Aware Model Routing
-- Evaluates linguistic complexity and routes queries between **Economy Tier** (20B small models @ `$0.075 / MTok`) and **Quality Tier** (120B large models @ `$0.15 / MTok`) under user-selected policies (`Economy`, `Balanced`, `Quality`).
-
----
-
-## 📊 Quantified Cost Savings & Benchmarks
-
-| Query Strategy | Format Constraint | Output Tokens | Tokens Saved | Cost / 10k Reqs (USD) | Savings vs. Baseline |
-|---|---|:---:|:---:|:---:|:---:|
-| **Unconstrained Baseline** | None | 105 tokens | 0 | **$0.324** | 0% |
-| **Hard Ceiling** | `max_tokens=50` | 46 tokens | 59 tokens | **$0.147** | **56.2%** |
-| **Concise Format** | `3 bullets` | 42 tokens | 63 tokens | **$0.138** | **60.0%** |
-| **Structured Output** | `JSON only` (max 60) | 33 tokens | 72 tokens | **$0.117** | **68.6%** |
-| **Maximum Density** | `no preamble` (max 30) | 18 tokens | 87 tokens | **$0.066** | **82.9%** |
+**Result:** Completion tokens drop from 105 to between 18 and 46 tokens per query—a **56% to 83% reduction** (see [Benchmarks](#benchmarks)).
 
 ---
 
-## 🛠️ Technology Stack
+### 2. Multilingual Token Tax Analysis
 
-| Layer | Technologies | Purpose |
-|---|---|---|
-| **Backend Services** | **Python 3.11**, **FastAPI**, **Pydantic v2** | High-performance asynchronous REST API gateway. |
-| **ML & Algorithms** | **Scikit-Learn**, **NumPy**, **Tiktoken** | Ridge regression, PCA, K-Means, and BPE tokenization. |
-| **Storage & Persistence** | **SQLite3** (WAL mode), JSON fixtures | Transactional audit store and curated baseline fixtures. |
-| **Frontend UI** | **React 19**, **TypeScript 5.8**, **Vite 6** | Component-driven interactive dashboard with strict types. |
-| **Visualization & Styling** | **Tailwind CSS v4**, **Recharts 2.15**, **Lucide Icons** | Responsive layout, theme variables, and SVG data charts. |
-| **Test Engineering** | **Pytest**, **Vitest**, **Ruff** | 214 unit, integration, stress, and invariant tests. |
+```
+English (Romanized)  ──┐
+Hinglish (code-mixed) ─┼──► [Tokenizer] ──► tokens, chars, tokens/char, mixing ratio
+Hindi (Devanagari)   ──┘
+```
+
+#### The Problem: Tokenizer Bias
+Byte-Pair Encoding (BPE) vocabularies such as `cl100k_base` are trained predominantly on English text. Devanagari characters and code-mixed scripts fragment into multiple byte-level tokens, making the exact same semantic intent cost **1.8× to 2.5× more**.
+
+#### The Solution: Transparent Token Analytics
+The inspector tokenizes equivalent text across all three forms in real time and reports character count, token density, tokens per character, and code-mixing ratios. These metrics also serve as feature inputs for downstream model routing and length estimation.
 
 ---
 
-## 🧪 Comprehensive Quality & Test Verification
+### 3. Two-Tier Semantic Cache
 
-The repository includes a dedicated test runner validating all **214 automated tests** across the full stack in **~11 seconds**:
+```
+Request ──► [Tier 1: Normalized exact match, O(1)] ──Hit──► Cached Answer ($0)
+                     │ Miss
+                     ▼
+            [Tier 2: Embedding cosine search]      ──Hit──► Cached Answer ($0)
+                     │ Miss
+                     ▼
+              Continue Gateway Pipeline
+```
+
+#### The Problem: Redundant Inference Spend
+Common organizational queries (e.g., campus policies, IT setups, deadlines) are repeatedly sent to frontier LLMs even though verified answers already exist.
+
+#### The Solution: Dual-Tier Retrieval
+An $O(1)$ normalized string match handles verbatim queries, backed by an offline hash and vector embeddings for semantically equivalent paraphrases.
+
+**Result:** Cache hits return in **under 10 ms at $0.00 inference cost**.
+
+---
+
+### 4. Policy-Aware Model Routing
+
+```
+[Complexity Score] + [Policy: Economy | Balanced | Quality]
+          │
+          ▼
+   Economy Tier (20B, $0.075 / MTok)   or   Quality Tier (120B, $0.15 / MTok)
+```
+
+#### The Problem: One Model for Every Query
+Sending simple, rote queries to a large frontier model wastes token budgets, while sending complex reasoning tasks to a small model compromises answer quality.
+
+#### The Solution: Difficulty Scoring with Policy Overrides
+The router evaluates linguistic complexity using trained classifiers (Logistic Regression, Random Forest, MLP), then maps the difficulty score against the user's active policy threshold (`Economy`, `Balanced`, or `Quality`).
+
+---
+
+### 5. Statistical ML Analytics on CPU
+
+```
+Request Features (6) ──► PCA (2 components) ──► K-Means (k=3) ──► Traffic Profiles
+```
+
+- **Supervised Ridge Regression ($R^2 \approx 0.84, \text{MAE} \approx 6\text{ tokens}$):** Predicts expected output length from input tokens, language script, format constraints, and hard ceilings. Feature coefficients confirm that format instructions systematically suppress output length.
+- **Unsupervised 2D PCA & K-Means ($k=3$):** Standardizes six request dimensions (input tokens, output tokens, code-mixing ratio, cache status, compression flag, routing tier) onto two principal components, grouping traffic into *Compact/Capped*, *Standard Multilingual*, and *High-Detail Quality* profiles.
+
+---
+
+## Benchmarks
+
+*Metrics calculated per 10,000 requests. Token reduction is measured on completion tokens; cost reduction is computed using standard catalog rates.*
+
+| Strategy | Constraint | Output Tokens | Cost (USD) | Token Reduction | Cost Reduction |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **Baseline** | None | 105 | $0.324 | 0% | 0% |
+| **Hard Ceiling** | `max_tokens=50` | 46 | $0.147 | **56.2%** | **54.6%** |
+| **Concise Format** | `3 bullets` | 42 | $0.138 | **60.0%** | **57.4%** |
+| **Structured Output** | `JSON only` (max 60) | 33 | $0.117 | **68.6%** | **63.9%** |
+| **Maximum Density** | `no preamble` (max 30) | 18 | $0.066 | **82.9%** | **79.6%** |
+
+---
+
+## Getting Started
+
+### Prerequisites
+- **Node.js** v20+
+- **Python** 3.11+
+
+### Installation & Run
 
 ```bash
-# Run all frontend and backend tests with formatted dashboard:
+# 1. Clone repository
+git clone https://github.com/AmanKashyapp07/Token-Optimiser.git
+cd Token-Optimiser
+
+# 2. Automated one-time setup
+python scripts/setup.py
+
+# 3. Start backend (Port 8000) and frontend (Port 8080) together
+npm run dev
+```
+
+| Interface | URL | Description |
+| :--- | :--- | :--- |
+| **Unified Studio Dashboard** | [http://localhost:8080](http://localhost:8080) | Interactive 4-stage pipeline workbench |
+| **Token & Cost Insights** | [http://localhost:8080/insights](http://localhost:8080/insights) | Analytics, charts, ML models & token tax |
+| **API Documentation (Swagger)** | [http://localhost:8000/docs](http://localhost:8000/docs) | Interactive OpenAPI/FastAPI endpoint docs |
+
+---
+
+## Testing & Quality Assurance
+
+A unified test runner verifies all **214 automated tests** across the entire stack in **~11 seconds**:
+
+```bash
 npm run test:all
 # or:
 ./scripts/run_tests.sh
 ```
 
-### Verified Test Categories:
-- **Unified Pipeline Integration (`test_unified_pipeline.py`):** Simulates end-to-end multi-stage query lifecycle.
-- **Robustness & Invariants (`test_unified_robustness.py`):** Enforces cost monotonicity, strict capping ceilings, safety span preservation (URLs, emails, currency), and 20-query sequential stress testing.
-- **Feature Suites:** Dedicated suites for Insights & Capping (`test_insights.py`), Routing (`test_routing_*.py`), Compression (`test_compression.py`), and Cache (`test_cache.py`).
-- **Frontend Type & Unit Tests:** Full Vitest test suites (`src/**/*.test.ts`) and zero-error `tsc --noEmit` check.
+| Suite | Scope | Verified Invariants |
+| :--- | :--- | :--- |
+| **Pipeline Integration** | End-to-end multi-stage lifecycle | Full data propagation across all 4 pipeline stages |
+| **Robustness & Invariants** | Edge cases & stress testing | Cost monotonicity, capping ceilings, safety spans, 20-query stress execution |
+| **Feature Test Suites** | Individual domain modules | Dedicated suites for Insights, Routing, Compression, and Cache |
+| **Frontend Tests** | React components & client helpers | 52 Vitest unit tests and strict `tsc --noEmit` validation |
 
 ---
 
-## ⚡ Quickstart Guide
+## Presentation & Interview Guide
 
-### Prerequisites
-- **Node.js** v20+ and **Python** 3.11+
-
-### Installation & Setup
-
-```bash
-# 1. Clone your fork
-git clone https://github.com/AmanKashyapp07/Token-Optimiser.git
-cd Token-Optimiser
-
-# 2. Run automated cross-platform setup
-python scripts/setup.py
-
-# 3. Start both backend and frontend together
-npm run dev
-```
-
-Open your browser to:
-- **Unified Studio Dashboard:** [http://localhost:8080](http://localhost:8080)
-- **Token & Cost Insights Workspace:** [http://localhost:8080/insights](http://localhost:8080/insights)
-- **Interactive Swagger API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
-
----
-
-## 📖 Presentation & Interview Guide
-
-See [**`PRESENTATION.md`**](PRESENTATION.md) for a complete:
+For evaluators and technical interviewers, see [**`PRESENTATION.md`**](PRESENTATION.md) for:
 - 30-Second Elevator Pitch
-- Click-by-click live demo script for evaluators
-- Examiner Q&A cheat sheet covering tokenization mechanics, linear models, and system design trade-offs.
+- Step-by-step click walkthrough for live demonstrations
+- Examiner Q&A cheat sheet covering tokenization math, linear regularization, and gateway system design.
 
 ---
 
-## 👤 Author & Ownership
-- **Aman Kashyap** ([@AmanKashyapp07](https://github.com/AmanKashyapp07))
-  - *Lead Engineer:* Output Capping Constraint Engineering, Token Tax Analysis, Financial Cost Engine, and ML Analytics (Ridge Regression, PCA, K-Means).
-- *Course:* Introduction to Machine Learning (IML) Application Workbench.
+Built and maintained by **Aman Kashyap** · [GitHub Profile](https://github.com/AmanKashyapp07)<br/>
+*Developed for the Introduction to Machine Learning (IML) application workbench.*
