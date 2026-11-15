@@ -23,3 +23,16 @@ Open `http://localhost:8080`.
 ## Configuration
 
 Copy `.env.example` to `.env`. Demo mode runs with authored fixtures and local utilities. Live mode requires an OpenAI-compatible endpoint and model IDs. API keys stay on the server.
+
+## Testing & Verification
+
+Run the unified test runner to execute all 214 tests across frontend and backend:
+
+```bash
+npm run test:all
+# or: ./scripts/run_tests.sh
+```
+
+## Presentation Guide
+
+See `PRESENTATION.md` for a comprehensive step-by-step presentation script, architecture overview, and evaluator Q&A cheat sheet.

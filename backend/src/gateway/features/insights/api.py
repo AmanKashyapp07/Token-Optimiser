@@ -110,7 +110,11 @@ def tokenize(request: TokenizeRequest):
 def summary():
     """Aggregate stats across SQLite store and authored fixture requests."""
     settings = get_settings()
-    store_items = Store(settings.database_path).list_requests(200)
+    store = Store(settings.database_path)
+    with store.connect() as db:
+        row = db.execute("select count(*) from requests").fetchone()
+        recorded_in_store = int(row[0]) if row else 0
+    store_items = store.list_requests(200)
     fixture_items = load_request_fixtures()
 
     all_languages: list[str] = [i["language"] for i in store_items] + [i.get("language", "en") for i in fixture_items]
@@ -131,8 +135,8 @@ def summary():
     avg_tokens_saved = round(total_tokens_saved / max(sample_count, 1), 1)
 
     return {
-        "total_requests": len(store_items) + len(fixture_items),
-        "recorded_in_store": len(store_items),
+        "total_requests": recorded_in_store + len(fixture_items),
+        "recorded_in_store": recorded_in_store,
         "fixture_requests": len(fixture_items),
         "languages": languages_dist,
         "average_code_mix": avg_code_mix,

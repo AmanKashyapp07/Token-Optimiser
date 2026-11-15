@@ -11,6 +11,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 8080",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:all": "python3 scripts/run_all_tests.py",
     "check": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
