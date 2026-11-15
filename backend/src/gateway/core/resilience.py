@@ -131,6 +131,50 @@ class CircuitBreaker:
                 "failures_logged": self.failure_count,
             }
 
+    async def async_execute(
+        self,
+        primary_fn: Callable[..., Any],
+        fallback_fn: Callable[..., Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> tuple[Any, bool, dict[str, Any]]:
+        """Asynchronous execution guarding async provider calls."""
+        now = time.time()
+
+        if self.state == CircuitState.OPEN:
+            if self.last_failure_time and (now - self.last_failure_time >= self.recovery_timeout):
+                self._update_state(CircuitState.HALF_OPEN)
+            else:
+                res = fallback_fn(*args, **kwargs)
+                if asyncio.iscoroutine(res):
+                    res = await res
+                return res, True, {
+                    "circuit_state": CircuitState.OPEN.value,
+                    "fallback_reason": "circuit_breaker_open_upstream_unhealthy",
+                    "failures_logged": self.failure_count,
+                }
+
+        try:
+            res = primary_fn(*args, **kwargs)
+            if asyncio.iscoroutine(res):
+                res = await res
+            self.record_success()
+            return res, False, {
+                "circuit_state": self.state.value,
+                "fallback_reason": None,
+                "failures_logged": 0,
+            }
+        except Exception as exc:
+            self.record_failure()
+            res = fallback_fn(*args, **kwargs)
+            if asyncio.iscoroutine(res):
+                res = await res
+            return res, True, {
+                "circuit_state": self.state.value,
+                "fallback_reason": f"primary_failed: {str(exc)}",
+                "failures_logged": self.failure_count,
+            }
+
     def reset(self) -> None:
         """Reset circuit breaker to pristine CLOSED state."""
         self.state = CircuitState.CLOSED

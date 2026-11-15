@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import time
 import uuid
-from typing import Any, Literal
+from collections import OrderedDict
+from typing import Any, AsyncIterator, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from gateway.core.config import get_settings
@@ -12,6 +16,7 @@ from gateway.core.providers import Generation, Provider
 from gateway.core.resilience import get_circuit_breaker
 from gateway.core.store import Store
 from gateway.features.cache.api import _lookup
+from gateway.features.cache.coalescing import get_request_coalescer
 from gateway.features.compression.service import get_service as get_compression_service
 from gateway.features.routing.service import get_service as get_routing_service
 from gateway.pricing import tier_cost_usd
@@ -19,8 +24,16 @@ from gateway.pricing import tier_cost_usd
 # Mount endpoints at both /v1 (standard OpenAI SDK compatibility) and /api/v1 (internal gateway convention)
 router = APIRouter(tags=["unified-inference-api"])
 
-# Global in-memory trace store (LRU cache of recent 200 execution traces for sub-millisecond retrieval)
-_RECENT_TRACES: dict[str, dict[str, Any]] = {}
+# Global bounded LRU cache of recent 200 execution traces for sub-millisecond retrieval
+_RECENT_TRACES: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+
+def _record_trace_in_memory(trace_id: str, request_id: str, trace_data: dict[str, Any]) -> None:
+    """Stores trace with FIFO/LRU eviction capped strictly at 200 items."""
+    while len(_RECENT_TRACES) >= 200:
+        _RECENT_TRACES.popitem(last=False)
+    _RECENT_TRACES[trace_id] = trace_data
+    _RECENT_TRACES[request_id] = trace_data
 
 
 # ==============================================================================
@@ -44,7 +57,7 @@ class ChatCompletionRequest(BaseModel):
     compression_budget: float = Field(default=0.6, ge=0.1, le=1.0)
     compression_method: Literal["heuristic", "crf"] = "heuristic"
     use_cache: bool = True
-    simulate_provider_failure: bool = False  # For chaos/resilience testing
+    simulate_provider_failure: bool = False  # For chaos & resilience testing
 
 
 class ChatChoiceMessage(BaseModel):
@@ -108,12 +121,23 @@ async def execute_chat_completion(
     store = Store(settings.database_path)
     stages: list[StageSpan] = []
 
-    # Extract user prompt and system messages
-    user_prompts = [m.content for m in payload.messages if m.role == "user"]
-    if not user_prompts:
+    # 1. Preserve full conversation history & system prompt
+    user_messages = [m for m in payload.messages if m.role == "user"]
+    if not user_messages:
         raise HTTPException(status_code=422, detail="At least one user message is required.")
-    raw_prompt = user_prompts[-1]
-    system_prompts = [m.content for m in payload.messages if m.role == "system"]
+    raw_prompt = user_messages[-1].content
+
+    system_messages = [m.content for m in payload.messages if m.role == "system"]
+    system_instruction = "\n".join(system_messages) if system_messages else None
+
+    # Multi-turn context preservation
+    if len(payload.messages) > 1:
+        context_turns = []
+        for m in payload.messages:
+            context_turns.append(f"{m.role.capitalize()}: {m.content}")
+        compiled_query = "\n".join(context_turns)
+    else:
+        compiled_query = raw_prompt
 
     # --------------------------------------------------------------------------
     # STAGE 1: Dual-Tier Semantic Cache
@@ -143,6 +167,22 @@ async def execute_chat_completion(
     if cache_hit and cached_entry:
         total_lat = round((time.perf_counter() - start_time) * 1000, 2)
         answer_text = cached_entry.get("answer", "")
+        if payload.format_constraint == "JSON only" and not answer_text.strip().startswith("{"):
+            brief = answer_text.split(".")[0] if "." in answer_text else answer_text[:80]
+            answer_text = json.dumps({"status": "success", "answer": brief.strip()})
+        elif payload.format_constraint == "3 bullets" and not answer_text.strip().startswith(("•", "-", "*")):
+            parts = [s.strip() for s in answer_text.replace("\n", " ").split(".") if s.strip()]
+            if len(parts) >= 3:
+                answer_text = f"• {parts[0]}.\n• {parts[1]}.\n• {parts[2]}."
+            elif parts:
+                answer_text = "\n".join(f"• {p}." for p in parts)
+
+        finish_reason = "stop"
+        if payload.max_tokens is not None and payload.max_tokens > 0:
+            answer_text, was_capped = provider._truncate_to_max_tokens(answer_text, payload.max_tokens)
+            if was_capped:
+                finish_reason = "length"
+
         comp_tokens = provider.counter.count(answer_text)
 
         trace = ExecutionTrace(
@@ -152,8 +192,7 @@ async def execute_chat_completion(
             total_duration_ms=total_lat,
             stages=stages,
         )
-        _RECENT_TRACES[trace_id] = trace.model_dump()
-        _RECENT_TRACES[request_id] = trace.model_dump()
+        _record_trace_in_memory(trace_id, request_id, trace.model_dump())
 
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Execution-Trace-Id"] = trace_id
@@ -167,7 +206,7 @@ async def execute_chat_completion(
                 ChatChoice(
                     index=0,
                     message=ChatChoiceMessage(content=answer_text),
-                    finish_reason="stop",
+                    finish_reason=finish_reason,
                 )
             ],
             usage=ChatUsage(prompt_tokens=0, completion_tokens=comp_tokens, total_tokens=comp_tokens),
@@ -187,12 +226,12 @@ async def execute_chat_completion(
     t_stage = time.perf_counter()
     comp_svc = get_compression_service()
     comp_res = comp_svc.analyze(
-        raw_prompt,
+        compiled_query,
         method=payload.compression_method,
         budget=payload.compression_budget,
     )
     comp_lat = round((time.perf_counter() - t_stage) * 1000, 2)
-    compressed_prompt = comp_res.get("compressed", raw_prompt)
+    compressed_prompt = comp_res.get("compressed", compiled_query)
     stages.append(
         StageSpan(
             stage="prompt_compression",
@@ -208,27 +247,11 @@ async def execute_chat_completion(
     )
 
     # --------------------------------------------------------------------------
-    # STAGE 3: Model Routing Guarded by Circuit Breaker
+    # STAGE 3: Model Routing
     # --------------------------------------------------------------------------
     t_stage = time.perf_counter()
     router_svc = get_routing_service()
-    circuit_breaker = get_circuit_breaker()
-
-    def primary_routing():
-        if payload.simulate_provider_failure:
-            raise RuntimeError("Upstream frontier model 503 Service Unavailable")
-        return router_svc.predict(raw_prompt, payload.policy, compressed_prompt)
-
-    def fallback_routing():
-        return {
-            "selected_tier": "cheap",
-            "model": settings.cheap_model,
-            "policy": payload.policy,
-            "confidence": 1.0,
-            "reason": "circuit_breaker_fallback",
-        }
-
-    route_res, fallback_applied, cb_telemetry = circuit_breaker.execute(primary_routing, fallback_routing)
+    route_res = router_svc.predict(raw_prompt, payload.policy, compressed_prompt)
     routing_lat = round((time.perf_counter() - t_stage) * 1000, 2)
 
     selected_tier = "premium" if route_res.get("selected_tier") in {"strong", "quality"} else "cheap"
@@ -241,47 +264,73 @@ async def execute_chat_completion(
     stages.append(
         StageSpan(
             stage="model_routing",
-            status="fallback" if fallback_applied else "routed",
+            status="routed",
             latency_ms=routing_lat,
             details={
                 "selected_tier": route_res.get("selected_tier"),
                 "selected_model": chosen_model,
-                "fallback_applied": fallback_applied,
-                "circuit_state": cb_telemetry.get("circuit_state"),
+                "policy": payload.policy,
             },
         )
     )
 
     # --------------------------------------------------------------------------
-    # STAGE 4: Output Capping & Provider Generation
+    # STAGE 4: Output Capping & Provider Inference Behind Circuit Breaker
     # --------------------------------------------------------------------------
     t_stage = time.perf_counter()
+    circuit_breaker = get_circuit_breaker()
 
-    # Apply soft format directives into prompt if specified
+    # Prepend system instruction and format directives to prompt
     augmented_prompt = compressed_prompt
+    if system_instruction:
+        augmented_prompt = f"System: {system_instruction}\n\n{augmented_prompt}"
     if payload.format_constraint and payload.format_constraint != "none":
-        directive = f" (Format requirement: {payload.format_constraint})"
-        augmented_prompt = f"{compressed_prompt}{directive}"
+        augmented_prompt = f"{augmented_prompt} (Format requirement: {payload.format_constraint})"
 
-    generation: Generation = await provider.generate(
-        text=augmented_prompt,
-        model=chosen_model,
-        max_tokens=payload.max_tokens,
-        temperature=payload.temperature,
+    # Singleflight Coalescing Key for non-streaming calls
+    coalescer = get_request_coalescer()
+    coalesce_key = f"infer:{chosen_model}:{payload.max_tokens}:{payload.format_constraint}:{hash(augmented_prompt)}"
+
+    async def _do_inference() -> tuple[Generation, bool, dict[str, Any]]:
+        async def primary_provider_call():
+            if payload.simulate_provider_failure:
+                raise RuntimeError("Upstream frontier model 503 Service Unavailable")
+            return await provider.generate(
+                text=augmented_prompt,
+                model=chosen_model,
+                max_tokens=payload.max_tokens,
+                temperature=payload.temperature,
+            )
+
+        async def fallback_provider_call():
+            # Gracefully degrade to safe local fallback on upstream provider failure
+            out = provider.answer_fixture(augmented_prompt, max_tokens=payload.max_tokens)
+            out.model = settings.cheap_model
+            return out
+
+        # Circuit breaker directly wraps provider inference
+        return await circuit_breaker.async_execute(primary_provider_call, fallback_provider_call)
+
+    # Execute with singleflight coalescing
+    (generation, fallback_applied, cb_telemetry), was_coalesced = await coalescer.do(
+        coalesce_key, _do_inference
     )
     inference_lat = round((time.perf_counter() - t_stage) * 1000, 2)
 
     stages.append(
         StageSpan(
             stage="provider_inference",
-            status="generated",
+            status="fallback" if fallback_applied else "generated",
             latency_ms=inference_lat,
             details={
-                "model": chosen_model,
+                "model": chosen_model if not fallback_applied else settings.cheap_model,
                 "mode": generation.mode,
                 "prompt_tokens": generation.prompt_tokens,
                 "completion_tokens": generation.completion_tokens,
                 "finish_reason": generation.finish_reason,
+                "fallback_applied": fallback_applied,
+                "circuit_state": cb_telemetry.get("circuit_state"),
+                "coalesced": was_coalesced,
             },
         )
     )
@@ -289,7 +338,8 @@ async def execute_chat_completion(
     # --------------------------------------------------------------------------
     # STAGE 5: Cost Accounting & Financial Telemetry
     # --------------------------------------------------------------------------
-    cost_actual = tier_cost_usd(selected_tier, generation.prompt_tokens, generation.completion_tokens)
+    active_tier = "cheap" if fallback_applied else selected_tier
+    cost_actual = tier_cost_usd(active_tier, generation.prompt_tokens, generation.completion_tokens)
     unconstrained_expected_tokens = max(105, generation.completion_tokens)
     baseline_cost = tier_cost_usd(
         "premium",
@@ -306,8 +356,7 @@ async def execute_chat_completion(
         total_duration_ms=total_duration,
         stages=stages,
     )
-    _RECENT_TRACES[trace_id] = trace.model_dump()
-    _RECENT_TRACES[request_id] = trace.model_dump()
+    _record_trace_in_memory(trace_id, request_id, trace.model_dump())
 
     # Persist in SQLite transaction store
     store.record_request(
@@ -320,14 +369,16 @@ async def execute_chat_completion(
             "baseline_cost_usd": baseline_cost,
             "cost_saved_usd": cost_saved,
             "cache_hit": False,
-            "model": chosen_model,
-            "route": selected_tier,
+            "model": chosen_model if not fallback_applied else settings.cheap_model,
+            "route": active_tier,
             "input_tokens": generation.prompt_tokens,
             "output_tokens": generation.completion_tokens,
             "total_tokens": generation.total_tokens,
             "format_constraint": payload.format_constraint,
             "max_tokens": payload.max_tokens,
             "duration_ms": total_duration,
+            "coalesced": was_coalesced,
+            "fallback_applied": fallback_applied,
             "trace": trace.model_dump(),
         },
     )
@@ -341,7 +392,7 @@ async def execute_chat_completion(
     return ChatCompletionResponse(
         id=f"chatcmpl-{uuid.uuid4().hex[:12]}",
         created=int(time.time()),
-        model=chosen_model,
+        model=chosen_model if not fallback_applied else settings.cheap_model,
         choices=[
             ChatChoice(
                 index=0,
@@ -359,29 +410,87 @@ async def execute_chat_completion(
             "compressed": comp_res.get("compressed_tokens", 0) < comp_res.get("original_tokens", 0),
             "original_prompt_tokens": comp_res.get("original_tokens"),
             "compressed_prompt_tokens": comp_res.get("compressed_tokens"),
-            "selected_tier": selected_tier,
+            "selected_tier": active_tier,
             "cost_usd": round(cost_actual, 8),
             "baseline_cost_usd": round(baseline_cost, 8),
             "cost_saved_usd": round(cost_saved, 8),
             "cost_reduction_pct": round((cost_saved / max(1e-6, baseline_cost)) * 100, 1),
+            "coalesced": was_coalesced,
+            "fallback_applied": fallback_applied,
         },
         trace=trace,
     )
+
+
+async def stream_chat_completion(
+    payload: ChatCompletionRequest,
+    cache_scope: str = "public",
+) -> AsyncIterator[str]:
+    """Streams chat completion response using Server-Sent Events (SSE)."""
+    settings = get_settings()
+    provider = Provider(settings)
+    cmpl_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+    created_time = int(time.time())
+
+    # Extract user prompt
+    user_prompts = [m.content for m in payload.messages if m.role == "user"]
+    raw_prompt = user_prompts[-1] if user_prompts else ""
+    chosen_model = payload.model if payload.model and payload.model != "auto" else settings.cheap_model
+
+    # Stream chunks
+    async for chunk in provider.stream(raw_prompt, chosen_model, max_tokens=payload.max_tokens, temperature=payload.temperature):
+        chunk_data = {
+            "id": cmpl_id,
+            "object": "chat.completion.chunk",
+            "created": created_time,
+            "model": chosen_model,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"content": chunk},
+                    "finish_reason": None,
+                }
+            ],
+        }
+        yield f"data: {json.dumps(chunk_data)}\n\n"
+
+    # End with finish_reason and [DONE]
+    final_chunk = {
+        "id": cmpl_id,
+        "object": "chat.completion.chunk",
+        "created": created_time,
+        "model": chosen_model,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {},
+                "finish_reason": "stop",
+            }
+        ],
+    }
+    yield f"data: {json.dumps(final_chunk)}\n\n"
+    yield "data: [DONE]\n\n"
 
 
 # ==============================================================================
 # HTTP Route Declarations
 # ==============================================================================
 
-@router.post("/v1/chat/completions", response_model=ChatCompletionResponse)
-@router.post("/api/v1/chat/completions", response_model=ChatCompletionResponse)
+@router.post("/v1/chat/completions")
+@router.post("/api/v1/chat/completions")
 async def chat_completions(
     payload: ChatCompletionRequest,
     request: Request,
     response: Response,
     cache_scope: str = Header(default="public", alias="X-Cache-Scope"),
-) -> ChatCompletionResponse:
+):
     """OpenAI-compatible unified inference endpoint integrating the full 4-stage optimization pipeline."""
+    if payload.stream:
+        return StreamingResponse(
+            stream_chat_completion(payload, cache_scope),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Request-ID": getattr(request.state, "request_id", uuid.uuid4().hex)},
+        )
     return await execute_chat_completion(payload, request, response, cache_scope)
 
 

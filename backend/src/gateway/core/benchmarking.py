@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from typing import Any, Literal
 
@@ -119,12 +120,35 @@ async def run_gateway_benchmark(
                 baseline_cost += res.optimisation.get("baseline_cost_usd", 0.0)
 
                 content = res.choices[0].message.content
-                if content:
-                    if item["fmt"] == "3 bullets" and ("•" in content or "-" in content or "\n" in content):
-                        valid_format_count += 1
-                    elif item["fmt"] == "JSON only" and ("{" in content or "[" in content):
-                        valid_format_count += 1
-                    else:
+                if content and content.strip():
+                    fmt = item["fmt"]
+                    if fmt == "JSON only":
+                        clean_json = content.strip()
+                        if clean_json.startswith("```json"):
+                            clean_json = clean_json[7:]
+                        if clean_json.startswith("```"):
+                            clean_json = clean_json[3:]
+                        if clean_json.endswith("```"):
+                            clean_json = clean_json[:-3]
+                        try:
+                            json.loads(clean_json.strip())
+                            valid_format_count += 1
+                        except Exception:
+                            pass  # Invalid JSON, do NOT increment
+                    elif fmt == "3 bullets":
+                        bullet_count = sum(
+                            1 for line in content.splitlines()
+                            if line.strip().startswith(("•", "-", "*"))
+                            or (len(line.strip()) > 2 and line.strip()[0].isdigit() and line.strip()[1] in {".", ")"})
+                        )
+                        if bullet_count >= 2:
+                            valid_format_count += 1
+                    elif fmt == "no preamble":
+                        low = content.lower().strip()
+                        has_preamble = any(low.startswith(p) for p in ["sure,", "certainly,", "here is", "here are"])
+                        if not has_preamble:
+                            valid_format_count += 1
+                    elif fmt == "none":
                         valid_format_count += 1
             except Exception:
                 errors += 1

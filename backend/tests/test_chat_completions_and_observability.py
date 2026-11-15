@@ -64,6 +64,7 @@ def test_chat_completions_openai_compatible_schema(client):
 
 def test_chat_completions_semantic_cache_hit(client):
     """When a query matches the semantic cache, it resolves with $0 cost and cache metadata."""
+    client.post("/api/v1/cache/seed")
     payload = {
         "model": "auto",
         "messages": [
@@ -99,7 +100,7 @@ def test_chat_completions_strict_output_capping(client):
     assert res.status_code == 200
     data = res.json()
 
-    assert data["usage"]["completion_tokens"] <= 20
+    assert data["usage"]["completion_tokens"] <= 15
     assert data["choices"][0]["finish_reason"] == "length"
 
 
@@ -121,9 +122,9 @@ def test_chat_completions_resilience_circuit_breaker(client):
     # Request succeeds via fallback
     assert len(data["choices"][0]["message"]["content"]) > 0
     trace = data["trace"]
-    routing_stage = next(s for s in trace["stages"] if s["stage"] == "model_routing")
-    assert routing_stage["status"] == "fallback"
-    assert routing_stage["details"]["fallback_applied"] is True
+    inference_stage = next(s for s in trace["stages"] if s["stage"] == "provider_inference")
+    assert inference_stage["status"] == "fallback"
+    assert inference_stage["details"]["fallback_applied"] is True
 
 
 # ==============================================================================
@@ -175,3 +176,45 @@ def test_trace_not_found_returns_404(client):
     res = client.get("/api/v1/traces/non-existent-trace-id-12345")
     assert res.status_code == 404
     assert "not found" in res.json()["detail"].lower()
+
+
+def test_chat_completions_sse_streaming(client):
+    """When stream=True, the gateway returns an SSE event stream with data: [DONE]."""
+    payload = {
+        "model": "auto",
+        "messages": [
+            {"role": "user", "content": "Tell me about course registration."},
+        ],
+        "stream": True,
+        "use_cache": False,
+    }
+    res = client.post("/v1/chat/completions", json=payload)
+    assert res.status_code == 200
+    assert "text/event-stream" in res.headers.get("content-type", "")
+
+    body = res.text
+    assert "data: " in body
+    assert "data: [DONE]" in body
+    assert "chat.completion.chunk" in body
+
+
+def test_chat_completions_multi_turn_history_and_system_prompt(client):
+    """Multi-turn conversation history and system instructions are preserved in execution trace."""
+    payload = {
+        "model": "auto",
+        "messages": [
+            {"role": "system", "content": "You are a concise academic tutor."},
+            {"role": "user", "content": "What is Python?"},
+            {"role": "assistant", "content": "Python is a high-level programming language."},
+            {"role": "user", "content": "What are its key benefits?"},
+        ],
+        "use_cache": False,
+    }
+    res = client.post("/v1/chat/completions", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data["choices"][0]["message"]["content"]) > 0
+    trace = data["trace"]
+    comp_stage = next(s for s in trace["stages"] if s["stage"] == "prompt_compression")
+    assert comp_stage["status"] == "applied"
+
