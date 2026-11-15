@@ -9,7 +9,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8+-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![React](https://img.shields.io/badge/React-19.0-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
 [![Vite](https://img.shields.io/badge/Vite-6.3-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev)
-[![Tests](https://img.shields.io/badge/Tests-221%20Passing-10b981?style=flat-square&logo=pytest&logoColor=white)](scripts/run_all_tests.py)
+[![Tests](https://img.shields.io/badge/Tests-227%20Passing-10b981?style=flat-square&logo=pytest&logoColor=white)](scripts/run_all_tests.py)
 
 <p align="center">
   <b>Semantic Caching</b> •

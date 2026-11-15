@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .core.chat import router as chat_router
 from .core.config import get_settings
 from .core.middleware import RateLimiterMiddleware, RequestTracingMiddleware
 from .core.pipeline import router as gateway_pipeline_router
@@ -39,6 +40,7 @@ def health():
     }
 
 
+app.include_router(chat_router)
 app.include_router(gateway_pipeline_router)
 app.include_router(compression_router)
 app.include_router(routing_router)
