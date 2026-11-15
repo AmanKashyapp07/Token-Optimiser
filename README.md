@@ -41,27 +41,9 @@ A high-performance reverse-proxy gateway positioned between your application and
 
 ## System Architecture
 
-Every request to `/v1/chat/completions` passes through a six-stage optimization and resilience pipeline:
-
-```mermaid
-flowchart LR
-    Client([Client / OpenAI SDK]) --> GW["/v1/chat/completions"]
-
-    subgraph Pipeline["Six-Stage Gateway Pipeline"]
-        direction TB
-        S0["0. Singleflight Coalescer<br/>Deduplicates identical in-flight requests"]
-        S1["1. Dual-Tier Semantic Cache<br/>O(1) exact hash + vector cosine similarity"]
-        S2["2. Prompt Compression<br/>Lexical compaction with entity preservation"]
-        S3["3. Complexity Router & Circuit Breaker<br/>Classifier routing with automatic 503 fallback"]
-        S4["4. Output Capping & Truncation<br/>Structural directives + strict token bounds"]
-        S5["5. Distributed Tracing<br/>Microsecond latency spans & token accounting"]
-        S0 --> S1 -- "Miss" --> S2 --> S3 --> S4 --> S5
-    end
-
-    GW --> S0
-    S1 -- "Hit (< 10ms, $0)" --> Out([Optimized Response])
-    S5 --> Out
-```
+<div align="center">
+  <img src="docs/assets/architecture.png" alt="Token Optimiser High Level Architecture" width="100%" />
+</div>
 
 ---
 
