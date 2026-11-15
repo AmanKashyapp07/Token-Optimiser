@@ -21,8 +21,7 @@
 
 <p align="center">
   <a href="https://github.com/AmanKashyapp07/Token-Optimiser">View Repository</a> ·
-  <a href="https://github.com/AmanKashyapp07/Token-Optimiser/issues">Report Issue</a> ·
-  <a href="PRESENTATION.md">Presentation Guide</a>
+  <a href="https://github.com/AmanKashyapp07/Token-Optimiser/issues">Report Issue</a>
 </p>
 
 </div>
@@ -127,60 +126,6 @@ Quantifies tokenizer bias across English, Hinglish, and Hindi in real time. By c
 | **Persistence** | SQLite3 (WAL mode), JSON fixtures | ACID transactional request logging and curated benchmark datasets |
 | **Frontend UI** | React 19, TypeScript 5.8, Vite 6 | Strict type-safe interactive analytics and studio workbench |
 | **Data Visualization**| Tailwind CSS v4, Recharts 2.15, Lucide | Real-time reactive telemetry, cost curves, and PCA scatter plots |
-| **Verification** | Pytest, Vitest, Ruff | 214 automated unit, integration, invariant, and stress tests |
-
----
-
-## Production Reliability & Quality Assurance
-
-The system is validated by an automated, cross-platform verification engine executing **214 tests in ~11 seconds**:
-
-```bash
-npm run test:all
-# or:
-./scripts/run_tests.sh
-```
-
-- **Mathematical Invariant Testing:** Validates cost monotonicity, budget ceilings, and strict adherence to `max_tokens` boundaries.
-- **Safety Span Integrity:** Enforces that prompt compression algorithms never corrupt protected spans (URLs, email addresses, currency values).
-- **High-Concurrency Sequential Stress Testing:** 20-query end-to-end sequential pipeline verification with live SQLite persistence validation.
-- **Strict Static Typing:** 100% type-sound frontend (`tsc --noEmit`) and backend linting (`ruff`).
-
----
-
-## Quickstart & Demonstration
-
-### Prerequisites
-- **Node.js** v20+
-- **Python** 3.11+
-
-### Quick Launch
-```bash
-# 1. Clone repository
-git clone https://github.com/AmanKashyapp07/Token-Optimiser.git
-cd Token-Optimiser
-
-# 2. Automated one-time environment setup
-python scripts/setup.py
-
-# 3. Start unified gateway and analytics studio
-npm run dev
-```
-
-| Interface | URL | Purpose |
-| :--- | :--- | :--- |
-| **Gateway Studio** | [http://localhost:8080](http://localhost:8080) | Interactive end-to-end 4-stage pipeline execution |
-| **Analytics Workbench** | [http://localhost:8080/insights](http://localhost:8080/insights) | Multilingual token tax inspector, cost estimator & ML clusters |
-| **OpenAPI / Swagger** | [http://localhost:8000/docs](http://localhost:8000/docs) | Interactive API specifications and endpoint testing |
-
----
-
-## Pitch & Presentation Resources
-
-For professors, evaluators, and technical interviewers, refer to [**`PRESENTATION.md`**](PRESENTATION.md) for:
-- 30-Second Executive Pitch
-- Step-by-step live demo walkthrough script
-- Examiner Q&A cheat sheet covering token economics, linear regularization, and gateway architecture.
 
 ---
 
