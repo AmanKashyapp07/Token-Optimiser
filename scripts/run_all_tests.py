@@ -131,6 +131,7 @@ def main() -> int:
                 "pytest",
                 "backend/tests/test_unified_pipeline.py",
                 "backend/tests/test_unified_robustness.py",
+                "backend/tests/test_production_resilience.py",
                 "backend/tests/test_insights.py",
                 "backend/tests/test_compression.py",
                 "backend/tests/test_compression_evidence.py",
@@ -146,7 +147,7 @@ def main() -> int:
                 "-W", "ignore::UserWarning",
                 "-q",
             ],
-            lambda out: f"    {DIM}162 tests passed in all 4 gateway feature modules.{RESET}",
+            lambda out: f"    {DIM}169 tests passed across unified pipeline, production resilience, and all 4 features.{RESET}",
         ),
     ]
 
@@ -175,7 +176,7 @@ def main() -> int:
     print(f"{BOLD}{CYAN}└{'─' * 54}┴{'─' * 10}┴{'─' * 10}┘{RESET}")
 
     if all_ok:
-        print(f"\n  {GREEN}{BOLD}✔ 100% PASSING — 214 TOTAL TESTS PASSED{RESET} {DIM}(52 frontend + 162 backend){RESET}")
+        print(f"\n  {GREEN}{BOLD}✔ 100% PASSING — 221 TOTAL TESTS PASSED{RESET} {DIM}(52 frontend + 169 backend){RESET}")
         print(f"  {DIM}Total verification wall-clock time:{RESET} {BOLD}{total_time:.2f}s{RESET}")
         print(f"  {GREEN}{BOLD}The unified Token Optimiser gateway is verified and demo-ready! 🚀{RESET}\n")
         return 0
