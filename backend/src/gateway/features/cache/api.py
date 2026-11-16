@@ -16,6 +16,12 @@ from gateway.core.config import get_settings
 from gateway.core.providers import Provider
 from gateway.core.store import Store
 from gateway.features.cache.coalescing import get_request_coalescer
+from gateway.features.cache.context_cache import (
+    CachedEntryMetadata,
+    ContextAwareCacheKey,
+    ContextCompatibilityGate,
+    hash_system_prompt,
+)
 from gateway.features.cache.redis_index import RedisExactIndex
 from gateway.features.cache.settings import CacheSettings, get_cache_settings
 from gateway.modules.m12_semantic.embeddings import SemanticEmbedder
@@ -298,37 +304,89 @@ def _cache_result(item: dict, match_type: str, similarity: float, threshold: flo
     return result
 
 
-def _lookup(text: str, language: str = "auto", scope_id: str = "public") -> dict:
+def _lookup(
+    text: str,
+    language: str = "auto",
+    scope_id: str = "public",
+    system_prompt: str | None = None,
+    format_constraint: str = "none",
+    model: str = "auto",
+) -> dict:
     scope_id = _validated_scope(scope_id)
     store = _cache_store()
     key = normalize(text)
     if not key:
         raise HTTPException(status_code=422, detail="Question must contain letters or numbers.")
 
+    sys_hash = hash_system_prompt(system_prompt)
+    req_key = ContextAwareCacheKey(
+        scope_id=scope_id,
+        model_id=model,
+        system_prompt_hash=sys_hash,
+        format_constraint=format_constraint or "none",
+        normalized_query=key,
+    )
+
     cache_settings = get_cache_settings()
     hot = _hot_index(cache_settings)
     hot_result = hot.get(scope_id, key)
     if hot_result and isinstance(hot_result.get("cache_id"), int):
-        _touch_entry(hot_result["cache_id"], scope_id)
-        _record_lookup("exact", scope_id)
-        return hot_result
+        cand_meta = CachedEntryMetadata(
+            cache_id=hot_result["cache_id"],
+            question=hot_result.get("matched_question", ""),
+            normalized=key,
+            answer=hot_result.get("answer", ""),
+            scope_id=scope_id,
+            model_id=hot_result.get("model", "auto"),
+            system_prompt_hash=hot_result.get("system_prompt_hash", "none"),
+            format_constraint=hot_result.get("format_constraint", "none"),
+        )
+        is_compat, reason = ContextCompatibilityGate.is_compatible(req_key, text, cand_meta)
+        if is_compat:
+            _touch_entry(hot_result["cache_id"], scope_id)
+            _record_lookup("exact", scope_id)
+            return hot_result
 
     entries = _entries_for_scope(store, scope_id)
     for item in entries:
         if item["normalized"] == key:
-            _touch_entry(item["id"], scope_id)
-            result = _cache_result(item, "exact", 1.0)
-            hot.set(scope_id, key, result, cache_settings.ttl_seconds)
-            _record_lookup("exact", scope_id)
-            return result
+            cand_meta = CachedEntryMetadata(
+                cache_id=item["id"],
+                question=item["question"],
+                normalized=item["normalized"],
+                answer=item["answer"],
+                scope_id=scope_id,
+                model_id="auto",
+                system_prompt_hash="none",
+                format_constraint=format_constraint or "none",
+            )
+            is_compat, reason = ContextCompatibilityGate.is_compatible(req_key, text, cand_meta)
+            if is_compat:
+                _touch_entry(item["id"], scope_id)
+                result = _cache_result(item, "exact", 1.0)
+                hot.set(scope_id, key, result, cache_settings.ttl_seconds)
+                _record_lookup("exact", scope_id)
+                return result
 
     best, best_score = _nearest(text, entries)
 
     threshold = _semantic_threshold()
     if best is not None and best_score >= threshold:
-        _touch_entry(best["id"], scope_id)
-        _record_lookup("semantic", scope_id)
-        return _cache_result(best, "semantic", best_score, threshold)
+        cand_meta = CachedEntryMetadata(
+            cache_id=best["id"],
+            question=best["question"],
+            normalized=best["normalized"],
+            answer=best["answer"],
+            scope_id=scope_id,
+            model_id="auto",
+            system_prompt_hash="none",
+            format_constraint=format_constraint or "none",
+        )
+        is_compat, reason = ContextCompatibilityGate.is_compatible(req_key, text, cand_meta)
+        if is_compat:
+            _touch_entry(best["id"], scope_id)
+            _record_lookup("semantic", scope_id)
+            return _cache_result(best, "semantic", best_score, threshold)
 
     _record_lookup("miss", scope_id)
     return {
@@ -340,7 +398,7 @@ def _lookup(text: str, language: str = "auto", scope_id: str = "public") -> dict
         "source": best["source"] if best else None,
         "cache_id": best["id"] if best else None,
         "threshold": threshold,
-        "note": "No safe cache match. The closest question is shown for review only.",
+        "note": "No safe cache match or candidate rejected by Context Compatibility Gate.",
     }
 
 

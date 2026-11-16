@@ -146,7 +146,14 @@ async def execute_chat_completion(
     cached_entry = None
 
     if payload.use_cache:
-        cached_entry = _lookup(raw_prompt, language="auto", scope_id=cache_scope)
+        cached_entry = _lookup(
+            raw_prompt,
+            language="auto",
+            scope_id=cache_scope,
+            system_prompt=system_instruction,
+            format_constraint=payload.format_constraint,
+            model=payload.model,
+        )
         if cached_entry and cached_entry.get("hit"):
             cache_hit = True
 
