@@ -9,12 +9,43 @@ from typing import Any
 from gateway.modules.m12_semantic.embeddings import SemanticEmbedder
 
 # Regexes for entity / context divergence gating
-_PROG_LANGS = {"python", "java", "c++", "cpp", "c#", "csharp", "javascript", "typescript", "golang", "go", "rust", "ruby", "php"}
-_PRESENT_TEMPORALS = {"today", "current", "latest", "now"}
-_PAST_TEMPORALS = {"yesterday", "previous", "last week", "last year", "past"}
+_PROG_LANGS = {
+    "python", "java", "c++", "cpp", "c#", "csharp", "javascript", "typescript",
+    "golang", "go", "rust", "ruby", "php", "swift", "kotlin", "scala"
+}
+_PRESENT_TEMPORALS = {"today", "current", "latest", "now", "this morning"}
+_PAST_TEMPORALS = {"yesterday", "previous", "last week", "last year", "past", "historical", "years ago"}
 _FUTURE_TEMPORALS = {"tomorrow", "next week", "next year", "upcoming"}
-_NUMBER_OR_ID_RE = re.compile(r"\b(?:assignment|cs|hw|lab|quiz|exam|part|phase|v|version)\s*([0-9]+|[a-z])\b", re.IGNORECASE)
-_NUMERIC_TOKEN_RE = re.compile(r"\b\d+\b")
+_DAYS_OF_WEEK = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
+_QUARTERS = {"q1", "q2", "q3", "q4"}
+_TIME_OF_DAY = {"morning", "afternoon", "evening", "night"}
+
+_NUMBER_OR_ID_RE = re.compile(r"\b(?:assignment|cs|hw|lab|quiz|exam|part|phase|v|version|node|txn|acc|flag|item|port|org|room|flight)\s*[-_]?([0-9]+|[a-z])\b", re.IGNORECASE)
+_NUMERIC_TOKEN_RE = re.compile(r"\b\d+(?:\.\d+)?\b")
+
+_NEGATION_TOKENS = {
+    "not", "no", "never", "without", "nahi", "na", "mat",
+    "unsuccessful", "invalid", "disable", "disabled", "insufficient",
+    "deny", "denied", "offline",
+}
+_AFFIRMATIVE_ANTONYMS = {
+    "successful": "unsuccessful",
+    "unsuccessful": "successful",
+    "valid": "invalid",
+    "invalid": "valid",
+    "enable": "disable",
+    "disable": "enable",
+    "enabled": "disabled",
+    "disabled": "enabled",
+    "sufficient": "insufficient",
+    "insufficient": "sufficient",
+    "allow": "deny",
+    "deny": "allow",
+    "online": "offline",
+    "offline": "online",
+    "with": "without",
+    "without": "with",
+}
 
 
 def normalize_query_text(text: str) -> str:
@@ -69,17 +100,18 @@ class ContextCompatibilityGate:
     1. System instructions differ.
     2. Format constraints differ (e.g. JSON vs bullets).
     3. Programming languages differ (e.g. Python vs Java).
-    4. Temporal references differ (e.g. today vs yesterday).
+    4. Temporal references differ (e.g. today vs yesterday, days of week, quarters).
     5. Numeric assignment / course IDs differ (e.g. assignment 1 vs assignment 2).
+    6. Numerical tokens differ (e.g. 10% of 200 vs 10% of 500).
+    7. Polarity or negation differs (e.g. transaction successful vs unsuccessful).
     """
 
     @staticmethod
-    def extract_critical_entities(text: str) -> dict[str, set[str]]:
+    def extract_critical_entities(text: str) -> dict[str, Any]:
         lowered = text.lower()
         words = set(re.findall(r"\b[a-zA-Z0-9+#_]+\b", lowered))
 
         langs = words & _PROG_LANGS
-        # Normalize cpp / csharp aliases
         if "cpp" in langs:
             langs.add("c++")
         if "csharp" in langs:
@@ -93,14 +125,24 @@ class ContextCompatibilityGate:
         if any(t in lowered for t in _FUTURE_TEMPORALS):
             temporal_buckets.add("future")
 
+        days = words & _DAYS_OF_WEEK
+        quarters = words & _QUARTERS
+        time_of_day = words & _TIME_OF_DAY
+
         id_matches = set(_NUMBER_OR_ID_RE.findall(lowered))
         numbers = set(_NUMERIC_TOKEN_RE.findall(lowered))
+        negations = words & _NEGATION_TOKENS
 
         return {
+            "words": words,
             "langs": langs,
             "temporals": temporal_buckets,
+            "days": days,
+            "quarters": quarters,
+            "time_of_day": time_of_day,
             "ids": id_matches,
             "numbers": numbers,
+            "negations": negations,
         }
 
     @classmethod
@@ -126,20 +168,46 @@ class ContextCompatibilityGate:
         req_ent = cls.extract_critical_entities(req_text)
         cand_ent = cls.extract_critical_entities(candidate.question)
 
+        # Check polarity and negation divergence
+        if req_ent["negations"] != cand_ent["negations"]:
+            return False, f"Polarity/Negation divergence: {req_ent['negations']} vs {cand_ent['negations']}"
+
+        for w in req_ent["words"]:
+            antonym = _AFFIRMATIVE_ANTONYMS.get(w)
+            if antonym and antonym in cand_ent["words"]:
+                return False, f"Antonym divergence: '{w}' vs '{antonym}'"
+
         # Check programming language divergence
         if req_ent["langs"] or cand_ent["langs"]:
             if req_ent["langs"] != cand_ent["langs"]:
                 return False, f"Programming language divergence: {req_ent['langs']} vs {cand_ent['langs']}"
 
-        # Check temporal marker divergence (e.g. today vs yesterday)
+        # Check temporal marker divergence
         if req_ent["temporals"] or cand_ent["temporals"]:
             if req_ent["temporals"] != cand_ent["temporals"]:
                 return False, f"Temporal reference divergence: {req_ent['temporals']} vs {cand_ent['temporals']}"
+
+        if req_ent["days"] or cand_ent["days"]:
+            if req_ent["days"] != cand_ent["days"]:
+                return False, f"Day of week divergence: {req_ent['days']} vs {cand_ent['days']}"
+
+        if req_ent["quarters"] or cand_ent["quarters"]:
+            if req_ent["quarters"] != cand_ent["quarters"]:
+                return False, f"Quarter divergence: {req_ent['quarters']} vs {cand_ent['quarters']}"
+
+        if req_ent["time_of_day"] or cand_ent["time_of_day"]:
+            if req_ent["time_of_day"] != cand_ent["time_of_day"]:
+                return False, f"Time of day divergence: {req_ent['time_of_day']} vs {cand_ent['time_of_day']}"
 
         # Check specific assignment / course ID divergence (assignment 1 vs 2)
         if req_ent["ids"] or cand_ent["ids"]:
             if req_ent["ids"] != cand_ent["ids"]:
                 return False, f"Identifier divergence: {req_ent['ids']} vs {cand_ent['ids']}"
+
+        # Check numerical tokens divergence (e.g. 200 vs 500)
+        if req_ent["numbers"] or cand_ent["numbers"]:
+            if req_ent["numbers"] != cand_ent["numbers"]:
+                return False, f"Numerical divergence: {req_ent['numbers']} vs {cand_ent['numbers']}"
 
         return True, "compatible"
 
@@ -152,7 +220,7 @@ class TwoLayerContextCache:
 
     def __init__(self, embedder: SemanticEmbedder | None = None):
         self.embedder = embedder or SemanticEmbedder(use_st=False)
-        self.exact_index: dict[str, CachedEntryMetadata] = {}  # compound_key -> entry
+        self.exact_index: dict[str, CachedEntryMetadata] = {}
         self.entries_by_scope: dict[str, list[CachedEntryMetadata]] = {}
 
     def insert(self, entry: CachedEntryMetadata) -> str:
@@ -243,7 +311,6 @@ class TwoLayerContextCache:
             if sim >= threshold:
                 is_compat, reason = ContextCompatibilityGate.is_compatible(req_key, query, cand)
                 if is_compat:
-                    # Semantic Hit passes all context gates
                     return {
                         "hit": True,
                         "layer": 2,

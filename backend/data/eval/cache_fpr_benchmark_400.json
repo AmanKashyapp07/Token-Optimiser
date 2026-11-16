@@ -1,0 +1,772 @@
+{
+  "benchmark_name": "Semantic Cache False-Positive Rate & Wilson CI Benchmark",
+  "total_pairs": 430,
+  "production_threshold": 0.55,
+  "production_metrics": {
+    "threshold": 0.55,
+    "sample_size": 430,
+    "tp": 40,
+    "fp": 0,
+    "tn": 350,
+    "fn": 40,
+    "precision_pct": 100.0,
+    "precision_ci_95": [
+      91.24,
+      100.0
+    ],
+    "recall_pct": 50.0,
+    "recall_ci_95": [
+      39.3,
+      60.7
+    ],
+    "fpr_pct": 0.0,
+    "fpr_ci_95": [
+      0.0,
+      1.09
+    ],
+    "categories": {
+      "negation": {
+        "total": 100,
+        "tp": 0,
+        "fp": 0,
+        "tn": 100,
+        "fn": 0,
+        "fpr_pct": 0.0,
+        "precision_pct": 100.0,
+        "recall_pct": 0.0
+      },
+      "numerical": {
+        "total": 90,
+        "tp": 0,
+        "fp": 0,
+        "tn": 90,
+        "fn": 0,
+        "fpr_pct": 0.0,
+        "precision_pct": 100.0,
+        "recall_pct": 0.0
+      },
+      "temporal": {
+        "total": 60,
+        "tp": 0,
+        "fp": 0,
+        "tn": 60,
+        "fn": 0,
+        "fpr_pct": 0.0,
+        "precision_pct": 100.0,
+        "recall_pct": 0.0
+      },
+      "language_api": {
+        "total": 60,
+        "tp": 0,
+        "fp": 0,
+        "tn": 60,
+        "fn": 0,
+        "fpr_pct": 0.0,
+        "precision_pct": 100.0,
+        "recall_pct": 0.0
+      },
+      "context_gate": {
+        "total": 40,
+        "tp": 0,
+        "fp": 0,
+        "tn": 40,
+        "fn": 0,
+        "fpr_pct": 0.0,
+        "precision_pct": 100.0,
+        "recall_pct": 0.0
+      },
+      "paraphrase_hit": {
+        "total": 80,
+        "tp": 40,
+        "fp": 0,
+        "tn": 0,
+        "fn": 40,
+        "fpr_pct": 0.0,
+        "precision_pct": 100.0,
+        "recall_pct": 50.0
+      }
+    }
+  },
+  "threshold_sweep": [
+    {
+      "threshold": 0.4,
+      "sample_size": 430,
+      "tp": 60,
+      "fp": 0,
+      "tn": 350,
+      "fn": 20,
+      "precision_pct": 100.0,
+      "precision_ci_95": [
+        93.98,
+        100.0
+      ],
+      "recall_pct": 75.0,
+      "recall_ci_95": [
+        64.52,
+        83.19
+      ],
+      "fpr_pct": 0.0,
+      "fpr_ci_95": [
+        0.0,
+        1.09
+      ],
+      "categories": {
+        "negation": {
+          "total": 100,
+          "tp": 0,
+          "fp": 0,
+          "tn": 100,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "numerical": {
+          "total": 90,
+          "tp": 0,
+          "fp": 0,
+          "tn": 90,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "temporal": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "language_api": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "context_gate": {
+          "total": 40,
+          "tp": 0,
+          "fp": 0,
+          "tn": 40,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "paraphrase_hit": {
+          "total": 80,
+          "tp": 60,
+          "fp": 0,
+          "tn": 0,
+          "fn": 20,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 75.0
+        }
+      }
+    },
+    {
+      "threshold": 0.5,
+      "sample_size": 430,
+      "tp": 50,
+      "fp": 0,
+      "tn": 350,
+      "fn": 30,
+      "precision_pct": 100.0,
+      "precision_ci_95": [
+        92.87,
+        100.0
+      ],
+      "recall_pct": 62.5,
+      "recall_ci_95": [
+        51.55,
+        72.31
+      ],
+      "fpr_pct": 0.0,
+      "fpr_ci_95": [
+        0.0,
+        1.09
+      ],
+      "categories": {
+        "negation": {
+          "total": 100,
+          "tp": 0,
+          "fp": 0,
+          "tn": 100,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "numerical": {
+          "total": 90,
+          "tp": 0,
+          "fp": 0,
+          "tn": 90,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "temporal": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "language_api": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "context_gate": {
+          "total": 40,
+          "tp": 0,
+          "fp": 0,
+          "tn": 40,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "paraphrase_hit": {
+          "total": 80,
+          "tp": 50,
+          "fp": 0,
+          "tn": 0,
+          "fn": 30,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 62.5
+        }
+      }
+    },
+    {
+      "threshold": 0.55,
+      "sample_size": 430,
+      "tp": 40,
+      "fp": 0,
+      "tn": 350,
+      "fn": 40,
+      "precision_pct": 100.0,
+      "precision_ci_95": [
+        91.24,
+        100.0
+      ],
+      "recall_pct": 50.0,
+      "recall_ci_95": [
+        39.3,
+        60.7
+      ],
+      "fpr_pct": 0.0,
+      "fpr_ci_95": [
+        0.0,
+        1.09
+      ],
+      "categories": {
+        "negation": {
+          "total": 100,
+          "tp": 0,
+          "fp": 0,
+          "tn": 100,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "numerical": {
+          "total": 90,
+          "tp": 0,
+          "fp": 0,
+          "tn": 90,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "temporal": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "language_api": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "context_gate": {
+          "total": 40,
+          "tp": 0,
+          "fp": 0,
+          "tn": 40,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "paraphrase_hit": {
+          "total": 80,
+          "tp": 40,
+          "fp": 0,
+          "tn": 0,
+          "fn": 40,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 50.0
+        }
+      }
+    },
+    {
+      "threshold": 0.6,
+      "sample_size": 430,
+      "tp": 30,
+      "fp": 0,
+      "tn": 350,
+      "fn": 50,
+      "precision_pct": 100.0,
+      "precision_ci_95": [
+        88.65,
+        100.0
+      ],
+      "recall_pct": 37.5,
+      "recall_ci_95": [
+        27.69,
+        48.45
+      ],
+      "fpr_pct": 0.0,
+      "fpr_ci_95": [
+        0.0,
+        1.09
+      ],
+      "categories": {
+        "negation": {
+          "total": 100,
+          "tp": 0,
+          "fp": 0,
+          "tn": 100,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "numerical": {
+          "total": 90,
+          "tp": 0,
+          "fp": 0,
+          "tn": 90,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "temporal": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "language_api": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "context_gate": {
+          "total": 40,
+          "tp": 0,
+          "fp": 0,
+          "tn": 40,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "paraphrase_hit": {
+          "total": 80,
+          "tp": 30,
+          "fp": 0,
+          "tn": 0,
+          "fn": 50,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 37.5
+        }
+      }
+    },
+    {
+      "threshold": 0.7,
+      "sample_size": 430,
+      "tp": 10,
+      "fp": 0,
+      "tn": 350,
+      "fn": 70,
+      "precision_pct": 100.0,
+      "precision_ci_95": [
+        72.25,
+        100.0
+      ],
+      "recall_pct": 12.5,
+      "recall_ci_95": [
+        6.93,
+        21.5
+      ],
+      "fpr_pct": 0.0,
+      "fpr_ci_95": [
+        0.0,
+        1.09
+      ],
+      "categories": {
+        "negation": {
+          "total": 100,
+          "tp": 0,
+          "fp": 0,
+          "tn": 100,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "numerical": {
+          "total": 90,
+          "tp": 0,
+          "fp": 0,
+          "tn": 90,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "temporal": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "language_api": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "context_gate": {
+          "total": 40,
+          "tp": 0,
+          "fp": 0,
+          "tn": 40,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "paraphrase_hit": {
+          "total": 80,
+          "tp": 10,
+          "fp": 0,
+          "tn": 0,
+          "fn": 70,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 12.5
+        }
+      }
+    },
+    {
+      "threshold": 0.75,
+      "sample_size": 430,
+      "tp": 10,
+      "fp": 0,
+      "tn": 350,
+      "fn": 70,
+      "precision_pct": 100.0,
+      "precision_ci_95": [
+        72.25,
+        100.0
+      ],
+      "recall_pct": 12.5,
+      "recall_ci_95": [
+        6.93,
+        21.5
+      ],
+      "fpr_pct": 0.0,
+      "fpr_ci_95": [
+        0.0,
+        1.09
+      ],
+      "categories": {
+        "negation": {
+          "total": 100,
+          "tp": 0,
+          "fp": 0,
+          "tn": 100,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "numerical": {
+          "total": 90,
+          "tp": 0,
+          "fp": 0,
+          "tn": 90,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "temporal": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "language_api": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "context_gate": {
+          "total": 40,
+          "tp": 0,
+          "fp": 0,
+          "tn": 40,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "paraphrase_hit": {
+          "total": 80,
+          "tp": 10,
+          "fp": 0,
+          "tn": 0,
+          "fn": 70,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 12.5
+        }
+      }
+    },
+    {
+      "threshold": 0.8,
+      "sample_size": 430,
+      "tp": 0,
+      "fp": 0,
+      "tn": 350,
+      "fn": 80,
+      "precision_pct": 100.0,
+      "precision_ci_95": [
+        100.0,
+        100.0
+      ],
+      "recall_pct": 0.0,
+      "recall_ci_95": [
+        0.0,
+        4.58
+      ],
+      "fpr_pct": 0.0,
+      "fpr_ci_95": [
+        0.0,
+        1.09
+      ],
+      "categories": {
+        "negation": {
+          "total": 100,
+          "tp": 0,
+          "fp": 0,
+          "tn": 100,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "numerical": {
+          "total": 90,
+          "tp": 0,
+          "fp": 0,
+          "tn": 90,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "temporal": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "language_api": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "context_gate": {
+          "total": 40,
+          "tp": 0,
+          "fp": 0,
+          "tn": 40,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "paraphrase_hit": {
+          "total": 80,
+          "tp": 0,
+          "fp": 0,
+          "tn": 0,
+          "fn": 80,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        }
+      }
+    },
+    {
+      "threshold": 0.85,
+      "sample_size": 430,
+      "tp": 0,
+      "fp": 0,
+      "tn": 350,
+      "fn": 80,
+      "precision_pct": 100.0,
+      "precision_ci_95": [
+        100.0,
+        100.0
+      ],
+      "recall_pct": 0.0,
+      "recall_ci_95": [
+        0.0,
+        4.58
+      ],
+      "fpr_pct": 0.0,
+      "fpr_ci_95": [
+        0.0,
+        1.09
+      ],
+      "categories": {
+        "negation": {
+          "total": 100,
+          "tp": 0,
+          "fp": 0,
+          "tn": 100,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "numerical": {
+          "total": 90,
+          "tp": 0,
+          "fp": 0,
+          "tn": 90,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "temporal": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "language_api": {
+          "total": 60,
+          "tp": 0,
+          "fp": 0,
+          "tn": 60,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "context_gate": {
+          "total": 40,
+          "tp": 0,
+          "fp": 0,
+          "tn": 40,
+          "fn": 0,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        },
+        "paraphrase_hit": {
+          "total": 80,
+          "tp": 0,
+          "fp": 0,
+          "tn": 0,
+          "fn": 80,
+          "fpr_pct": 0.0,
+          "precision_pct": 100.0,
+          "recall_pct": 0.0
+        }
+      }
+    }
+  ]
+}
