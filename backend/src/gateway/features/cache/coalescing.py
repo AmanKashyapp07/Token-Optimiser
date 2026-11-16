@@ -4,17 +4,79 @@ import asyncio
 from typing import Any, Callable, Coroutine
 
 
+class CoalescingError(Exception):
+    """Base error for singleflight coalescing operations."""
+    pass
+
+
+class LeaderExecutionError(CoalescingError):
+    """Raised on follower requests when the in-flight leader execution fails.
+
+    Attributes:
+        key: The deduplication key for the coalesced group.
+        original_error: The underlying exception raised by the leader.
+        leader_failed: Always True, identifying this request as a coalesced follower.
+    """
+
+    def __init__(self, key: str, original_error: BaseException) -> None:
+        self.key = key
+        self.original_error = original_error
+        self.leader_failed = True
+        super().__init__(f"Singleflight leader execution failed for key '{key}': {original_error}")
+
+
 class RequestCoalescer:
-    """Singleflight pattern for cache lookups and expensive operations.
+    """Singleflight pattern for cache lookups and expensive provider inference.
 
     If multiple concurrent requests arrive with the exact same key simultaneously,
-    only the first request triggers the execution; all other requests await the
-    in-flight future and share the identical result, eliminating cache stampedes.
+    only the first request (the leader) triggers execution. All other requests (followers)
+    await the in-flight future and share the identical result, eliminating cache
+    stampedes and redundant upstream model inference.
+
+    If the leader encounters an exception, that exception is cleanly propagated to all
+    awaiting followers wrapped in a `LeaderExecutionError` without hanging or deadlock.
+    Follower cancellations are shielded so they do not abort the leader's execution.
     """
 
     def __init__(self) -> None:
         self._in_flight: dict[str, asyncio.Future] = {}
         self._lock = asyncio.Lock()
+        self._total_requests: int = 0
+        self._coalesced_requests: int = 0
+        self._leader_executions: int = 0
+        self._leader_failures: int = 0
+
+    @property
+    def active_in_flight(self) -> int:
+        return len(self._in_flight)
+
+    def get_metrics(self) -> dict[str, Any]:
+        """Returns runtime singleflight deduplication telemetry."""
+        hit_ratio = (
+            (self._coalesced_requests / self._total_requests)
+            if self._total_requests > 0
+            else 0.0
+        )
+        return {
+            "total_requests": self._total_requests,
+            "coalesced_requests": self._coalesced_requests,
+            "leader_executions": self._leader_executions,
+            "leader_failures": self._leader_failures,
+            "active_in_flight": len(self._in_flight),
+            "coalesce_hit_ratio": round(hit_ratio, 4),
+        }
+
+    def reset_metrics(self) -> None:
+        """Resets telemetry counters."""
+        self._total_requests = 0
+        self._coalesced_requests = 0
+        self._leader_executions = 0
+        self._leader_failures = 0
+
+    def reset(self) -> None:
+        """Resets both in-flight tracking and telemetry."""
+        self._in_flight.clear()
+        self.reset_metrics()
 
     async def do(
         self,
@@ -25,27 +87,43 @@ class RequestCoalescer:
 
         Returns:
             (result, was_coalesced: bool)
+
+        Raises:
+            LeaderExecutionError: If a coalesced follower was awaiting a leader that failed.
+            BaseException: If the caller was the leader and coro_fn raised.
         """
         async with self._lock:
+            self._total_requests += 1
             if key in self._in_flight:
                 future = self._in_flight[key]
                 is_leader = False
+                self._coalesced_requests += 1
             else:
                 loop = asyncio.get_running_loop()
                 future = loop.create_future()
                 self._in_flight[key] = future
                 is_leader = True
+                self._leader_executions += 1
 
         if not is_leader:
-            result = await future
-            return result, True
+            try:
+                # Shield prevents follower cancellation from cancelling the leader's future
+                result = await asyncio.shield(future)
+                return result, True
+            except asyncio.CancelledError:
+                raise
+            except BaseException as exc:
+                raise LeaderExecutionError(key=key, original_error=exc) from exc
 
         try:
             result = await coro_fn()
-            future.set_result(result)
+            if not future.done():
+                future.set_result(result)
             return result, False
         except BaseException as exc:
-            future.set_exception(exc)
+            self._leader_failures += 1
+            if not future.done():
+                future.set_exception(exc)
             raise
         finally:
             async with self._lock:

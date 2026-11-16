@@ -55,6 +55,11 @@ class CircuitState(str, Enum):
     HALF_OPEN = "HALF_OPEN"  # Recovery testing: test single request to see if provider recovered
 
 
+class CircuitBreakerOpenError(RuntimeError):
+    """Raised when the circuit breaker is OPEN and no fallback handler is supplied."""
+    pass
+
+
 class CircuitBreaker:
     """Production Circuit Breaker pattern implementation.
 
@@ -91,7 +96,7 @@ class CircuitBreaker:
     def execute(
         self,
         primary_fn: Callable[..., Any],
-        fallback_fn: Callable[..., Any],
+        fallback_fn: Callable[..., Any] | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> tuple[Any, bool, dict[str, Any]]:
@@ -107,6 +112,10 @@ class CircuitBreaker:
             if self.last_failure_time and (now - self.last_failure_time >= self.recovery_timeout):
                 self._update_state(CircuitState.HALF_OPEN)
             else:
+                if fallback_fn is None:
+                    raise CircuitBreakerOpenError(
+                        f"Circuit breaker is OPEN ({self.failure_count} failures). Upstream provider unhealthy."
+                    )
                 fallback_res = fallback_fn(*args, **kwargs)
                 return fallback_res, True, {
                     "circuit_state": CircuitState.OPEN.value,
@@ -124,6 +133,8 @@ class CircuitBreaker:
             }
         except Exception as exc:
             self.record_failure()
+            if fallback_fn is None:
+                raise
             fallback_res = fallback_fn(*args, **kwargs)
             return fallback_res, True, {
                 "circuit_state": self.state.value,
@@ -134,7 +145,7 @@ class CircuitBreaker:
     async def async_execute(
         self,
         primary_fn: Callable[..., Any],
-        fallback_fn: Callable[..., Any],
+        fallback_fn: Callable[..., Any] | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> tuple[Any, bool, dict[str, Any]]:
@@ -145,6 +156,10 @@ class CircuitBreaker:
             if self.last_failure_time and (now - self.last_failure_time >= self.recovery_timeout):
                 self._update_state(CircuitState.HALF_OPEN)
             else:
+                if fallback_fn is None:
+                    raise CircuitBreakerOpenError(
+                        f"Circuit breaker is OPEN ({self.failure_count} failures). Upstream provider unhealthy."
+                    )
                 res = fallback_fn(*args, **kwargs)
                 if asyncio.iscoroutine(res):
                     res = await res
@@ -166,6 +181,8 @@ class CircuitBreaker:
             }
         except Exception as exc:
             self.record_failure()
+            if fallback_fn is None:
+                raise
             res = fallback_fn(*args, **kwargs)
             if asyncio.iscoroutine(res):
                 res = await res

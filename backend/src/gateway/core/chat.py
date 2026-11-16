@@ -16,7 +16,7 @@ from gateway.core.providers import Generation, Provider
 from gateway.core.resilience import get_circuit_breaker
 from gateway.core.store import Store
 from gateway.features.cache.api import _lookup
-from gateway.features.cache.coalescing import get_request_coalescer
+from gateway.features.cache.coalescing import LeaderExecutionError, get_request_coalescer
 from gateway.features.compression.service import get_service as get_compression_service
 from gateway.features.routing.service import get_service as get_routing_service
 from gateway.pricing import tier_cost_usd
@@ -203,6 +203,7 @@ async def execute_chat_completion(
 
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Execution-Trace-Id"] = trace_id
+        response.headers["X-Gateway-Fallback"] = "false"
         response.headers["X-Stage-Latencies"] = f"cache={cache_lat}ms; total={total_lat}ms"
 
         return ChatCompletionResponse(
@@ -223,6 +224,7 @@ async def execute_chat_completion(
                 "cost_usd": 0.0,
                 "cost_saved_usd": round(tier_cost_usd("cheap", provider.counter.count(raw_prompt), comp_tokens), 6),
                 "answer_source": f"cache:{cached_entry.get('match_type')}",
+                "fallback_applied": False,
             },
             trace=trace,
         )
@@ -339,7 +341,13 @@ async def execute_chat_completion(
             )
 
         async def fallback_provider_call():
-            # Gracefully degrade to safe local fallback on upstream provider failure
+            # In production, never return silent fake canned fixtures
+            if settings.environment == "production":
+                raise HTTPException(
+                    status_code=503,
+                    detail="Upstream inference provider unavailable; circuit breaker tripped or upstream service failed in production mode",
+                )
+            # Gracefully degrade to safe local fallback on upstream provider failure in non-production
             out = provider.answer_fixture(augmented_prompt, max_tokens=effective_max_tokens)
             out.model = settings.cheap_model
             return out
@@ -348,9 +356,19 @@ async def execute_chat_completion(
         return await circuit_breaker.async_execute(primary_provider_call, fallback_provider_call)
 
     # Execute with singleflight coalescing
-    (generation, fallback_applied, cb_telemetry), was_coalesced = await coalescer.do(
-        coalesce_key, _do_inference
-    )
+    try:
+        (generation, fallback_applied, cb_telemetry), was_coalesced = await coalescer.do(
+            coalesce_key, _do_inference
+        )
+    except LeaderExecutionError as exc:
+        if isinstance(exc.original_error, HTTPException):
+            raise exc.original_error
+        if settings.environment == "production":
+            raise HTTPException(
+                status_code=503,
+                detail=f"Upstream provider failure in production: {exc.original_error}",
+            ) from exc
+        raise
     inference_lat = round((time.perf_counter() - t_stage) * 1000, 2)
 
     stages.append(
@@ -365,6 +383,7 @@ async def execute_chat_completion(
                 "completion_tokens": generation.completion_tokens,
                 "finish_reason": generation.finish_reason,
                 "fallback_applied": fallback_applied,
+                "answer_source": "fallback_fixture" if fallback_applied else "upstream_provider",
                 "circuit_state": cb_telemetry.get("circuit_state"),
                 "coalesced": was_coalesced,
             },
@@ -415,12 +434,14 @@ async def execute_chat_completion(
             "duration_ms": total_duration,
             "coalesced": was_coalesced,
             "fallback_applied": fallback_applied,
+            "answer_source": "fallback_fixture" if fallback_applied else "upstream_provider",
             "trace": trace.model_dump(),
         },
     )
 
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Execution-Trace-Id"] = trace_id
+    response.headers["X-Gateway-Fallback"] = "true" if fallback_applied else "false"
     response.headers["X-Stage-Latencies"] = (
         f"cache={cache_lat}ms; comp={comp_lat}ms; route={routing_lat}ms; infer={inference_lat}ms; total={total_duration}ms"
     )
@@ -455,6 +476,7 @@ async def execute_chat_completion(
             "budget_strategy": budget_res.strategy,
             "coalesced": was_coalesced,
             "fallback_applied": fallback_applied,
+            "answer_source": "fallback_fixture" if fallback_applied else "upstream_provider",
         },
         trace=trace,
     )

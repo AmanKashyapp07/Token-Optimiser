@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ROOT / ".env", env_file_encoding="utf-8", extra="ignore")
 
     mode: Literal["demo", "live"] = "demo"
+    environment: Literal["development", "test", "demo", "production"] = "demo"
+    redis_url: str | None = None
     host: str = "127.0.0.1"
     port: int = 8000
     api_base_url: str = ""
