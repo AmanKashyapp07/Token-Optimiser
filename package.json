@@ -11,8 +11,9 @@
     "preview": "vite preview --host 127.0.0.1 --port 8080",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:all": "python3 scripts/run_all_tests.py",
-    "benchmark": "python3 scripts/benchmark_gateway.py",
+    "test:all": "python3 tests/run_all_tests.py",
+    "test:backend": "pytest",
+    "benchmark": "python3 tests/benchmarks/benchmark_gateway.py",
     "check": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {

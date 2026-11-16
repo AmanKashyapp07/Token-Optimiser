@@ -9,7 +9,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8+-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![React](https://img.shields.io/badge/React-19.0-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](docker-compose.yml)
-[![Tests](https://img.shields.io/badge/Tests-258%20Passing-10b981?style=flat-square&logo=pytest&logoColor=white)](scripts/run_all_tests.py)
+[![Tests](https://img.shields.io/badge/Tests-258%20Passing-10b981?style=flat-square&logo=pytest&logoColor=white)](tests/run_all_tests.py)
 
 **A drop-in `/v1/chat/completions` reverse proxy that slashes LLM inference spend without degrading task quality — fully CPU-runnable with zero GPU dependencies.**
 
@@ -235,7 +235,9 @@ Tokenizer vocabularies heavily bias toward English, imposing an **Indic Token Ta
 Token Optimiser includes a comprehensive verification harness executing type checking, unit suites, integration tests, and quality benchmarks:
 
 ```bash
-python scripts/run_all_tests.py
+python tests/run_all_tests.py
+# Or via npm shortcut:
+npm run test:all
 ```
 
 ```

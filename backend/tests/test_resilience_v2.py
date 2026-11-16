@@ -212,6 +212,9 @@ def test_demo_environment_allows_fixture_with_x_gateway_fallback_header(client, 
 
 def test_successful_request_sets_x_gateway_fallback_false(client):
     """Successful normal completions explicitly declare X-Gateway-Fallback: false."""
+    from gateway.core.resilience import get_circuit_breaker
+    get_circuit_breaker().reset()
+
     payload = {
         "model": "auto",
         "messages": [
