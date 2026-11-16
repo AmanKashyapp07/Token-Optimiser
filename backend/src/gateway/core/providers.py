@@ -4,8 +4,7 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass
-from pathlib import Path
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 import httpx
 
@@ -201,7 +200,6 @@ class Provider:
         if max_tokens is not None and max_tokens > 0:
             payload["max_tokens"] = max_tokens
 
-        last_err: Exception | None = None
         for attempt in range(max_retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=30.0) as client:
@@ -233,7 +231,6 @@ class Provider:
                     continue
                 raise ProviderTimeoutError(f"Provider timed out after 30s: {exc}") from exc
             except httpx.HTTPError as exc:
-                last_err = exc
                 if attempt < max_retries:
                     await asyncio.sleep(0.5 * (2 ** attempt))
                     continue

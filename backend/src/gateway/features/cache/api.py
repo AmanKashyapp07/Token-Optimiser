@@ -6,6 +6,7 @@ import sqlite3
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from fastapi import APIRouter, Header, HTTPException

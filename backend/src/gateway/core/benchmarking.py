@@ -10,7 +10,6 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from gateway.core.chat import ChatCompletionRequest, ChatMessage, execute_chat_completion
-from gateway.core.config import get_settings
 
 router = APIRouter(prefix="/api/v1/benchmark", tags=["benchmarking"])
 
