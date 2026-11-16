@@ -10,6 +10,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from gateway.core.budgeting import AdaptiveTokenBudgeter
 from gateway.core.config import get_settings
 from gateway.core.providers import Generation, Provider
 from gateway.core.resilience import get_circuit_breaker
@@ -281,7 +282,36 @@ async def execute_chat_completion(
     )
 
     # --------------------------------------------------------------------------
-    # STAGE 4: Output Capping & Provider Inference Behind Circuit Breaker
+    # STAGE 4: ML-Powered Adaptive Token Budgeting
+    # --------------------------------------------------------------------------
+    t_stage = time.perf_counter()
+    budgeter = AdaptiveTokenBudgeter()
+    budget_res = budgeter.allocate(
+        prompt=raw_prompt,
+        format_constraint=payload.format_constraint,
+        user_max_tokens=payload.max_tokens,
+    )
+    budget_lat = round((time.perf_counter() - t_stage) * 1000, 2)
+    effective_max_tokens = budget_res.allocated_budget
+
+    stages.append(
+        StageSpan(
+            stage="adaptive_token_budgeting",
+            status="allocated",
+            latency_ms=budget_lat,
+            details={
+                "strategy": budget_res.strategy,
+                "allocated_budget": effective_max_tokens,
+                "predicted_tokens": budget_res.predicted_tokens,
+                "prediction_interval_margin": budget_res.prediction_interval_margin,
+                "truncation_risk_warning": budget_res.truncation_risk_warning,
+                "ridge_r2_score": budget_res.details.get("ridge_r2_score"),
+            },
+        )
+    )
+
+    # --------------------------------------------------------------------------
+    # STAGE 5: Output Capping & Provider Inference Behind Circuit Breaker
     # --------------------------------------------------------------------------
     t_stage = time.perf_counter()
     circuit_breaker = get_circuit_breaker()
@@ -295,7 +325,7 @@ async def execute_chat_completion(
 
     # Singleflight Coalescing Key for non-streaming calls
     coalescer = get_request_coalescer()
-    coalesce_key = f"infer:{chosen_model}:{payload.max_tokens}:{payload.format_constraint}:{hash(augmented_prompt)}"
+    coalesce_key = f"infer:{chosen_model}:{effective_max_tokens}:{payload.format_constraint}:{hash(augmented_prompt)}"
 
     async def _do_inference() -> tuple[Generation, bool, dict[str, Any]]:
         async def primary_provider_call():
@@ -304,13 +334,13 @@ async def execute_chat_completion(
             return await provider.generate(
                 text=augmented_prompt,
                 model=chosen_model,
-                max_tokens=payload.max_tokens,
+                max_tokens=effective_max_tokens,
                 temperature=payload.temperature,
             )
 
         async def fallback_provider_call():
             # Gracefully degrade to safe local fallback on upstream provider failure
-            out = provider.answer_fixture(augmented_prompt, max_tokens=payload.max_tokens)
+            out = provider.answer_fixture(augmented_prompt, max_tokens=effective_max_tokens)
             out.model = settings.cheap_model
             return out
 
@@ -421,6 +451,8 @@ async def execute_chat_completion(
             "baseline_cost_usd": round(baseline_cost, 8),
             "cost_saved_usd": round(cost_saved, 8),
             "cost_reduction_pct": round((cost_saved / max(1e-6, baseline_cost)) * 100, 1),
+            "allocated_max_tokens": effective_max_tokens,
+            "budget_strategy": budget_res.strategy,
             "coalesced": was_coalesced,
             "fallback_applied": fallback_applied,
         },
