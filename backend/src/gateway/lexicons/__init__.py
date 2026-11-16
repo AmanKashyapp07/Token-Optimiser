@@ -37,6 +37,56 @@ _SENT_SPLIT = re.compile(r"[.!?]+")
 _MARKER = re.compile(r"^\[\[PS\d+\]\]$")
 _COMMA_RE = re.compile(r"[,;:]")
 
+# Immutable Polarity and Tense Invariants: Tokens that reverse semantic polarity or alter grammatical tense
+# if removed or mishandled. These are never pruned under any circumstance.
+_IMMUTABLE_POLARITY_TOKENS = frozenset(
+    {
+        "nahi",
+        "nahin",
+        "nhi",
+        "nai",
+        "mat",
+        "not",
+        "never",
+        "no",
+        "neither",
+        "nor",
+        "naa",
+        "dont",
+        "don't",
+        "cant",
+        "can't",
+        "won't",
+        "wont",
+        "without",
+    }
+)
+
+_IMMUTABLE_TENSE_TOKENS = frozenset(
+    {
+        "tha",
+        "thi",
+        "the",
+        "hai",
+        "hain",
+        "hoga",
+        "hogi",
+        "hoge",
+        "raha",
+        "rahi",
+        "rahe",
+    }
+)
+
+# Common verbs that trigger prohibitive/negative reading when preceded by 'na'
+_HINDI_VERB_ROOTS = frozenset(
+    {
+        "karo", "karna", "kare", "karein", "jao", "jaana", "aao", "aana",
+        "bhejo", "bhejna", "do", "dena", "lo", "lena", "bolo", "bolna",
+        "chhod", "chhodo", "roko", "ruk", "suno", "dekho",
+    }
+)
+
 # Possessives that block vocative-drop when they immediately precede it.
 _POSSJECTIVES = frozenset(
     {
@@ -155,11 +205,35 @@ def _tech_context_in(tokens: list[str], tech_words: frozenset[str]) -> bool:
     return any(_strip_punct(t) in tech_words for t in tokens)
 
 
+def verify_polarity_invariant(original: str, compressed: str) -> bool:
+    """Verifies that no negation, polarity, tense, or numeric tokens were dropped during compression."""
+    orig_words = [_strip_punct(w) for w in original.lower().split()]
+    comp_words = [_strip_punct(w) for w in compressed.lower().split()]
+
+    for pol in _IMMUTABLE_POLARITY_TOKENS:
+        if comp_words.count(pol) < orig_words.count(pol):
+            return False
+
+    for tense in _IMMUTABLE_TENSE_TOKENS:
+        if comp_words.count(tense) < orig_words.count(tense):
+            return False
+
+    # Check numeric digit token preservation
+    orig_digits = re.findall(r"\b\d+\b", original)
+    comp_digits = re.findall(r"\b\d+\b", compressed)
+    for d in orig_digits:
+        if comp_digits.count(d) < orig_digits.count(d):
+            return False
+
+    return True
+
+
 def prune(text: str) -> tuple[str, list[DropRecord]]:
-    """Prune Hinglish/English fillers from masked text.
+    """Prune Hinglish/English fillers from masked text with Immutable Polarity Invariants.
 
     Input is expected to be span-masked ([[PSi]] markers in place of code/PII).
     Returns (pruned_text, drops) where every dropped token is accounted for.
+    If post-compression polarity or numeric checks fail, conservative fallback returns (text, []).
     """
     lex = _lexicons()
     normalized = _WS.sub(" ", text).strip()
@@ -200,6 +274,9 @@ def prune(text: str) -> tuple[str, list[DropRecord]]:
             window = tuple(_strip_punct(t) for t in tokens[i : i + n])
             if window != phrase:
                 continue
+            # Immutable polarity and tense guard on ngrams
+            if any(w in _IMMUTABLE_POLARITY_TOKENS or w in _IMMUTABLE_TENSE_TOKENS for w in window):
+                continue
             non_initial_ok = True
             comma_ok = True
             if category == "ngram_filler_non_initial":
@@ -219,6 +296,16 @@ def prune(text: str) -> tuple[str, list[DropRecord]]:
         low = _strip_punct(tok)
         if not low or _is_marker(tok):
             continue
+
+        # Immutable Polarity and Tense Invariants: NEVER DROP
+        if low in _IMMUTABLE_POLARITY_TOKENS or low in _IMMUTABLE_TENSE_TOKENS:
+            continue
+
+        # Context-dependent 'na' polarity check: if preceding a verb or sentence-initial, it's prohibitive negation
+        if low == "na":
+            nxt = _strip_punct(tokens[i + 1]) if i + 1 < len(tokens) else ""
+            if i in sent_starts or nxt in _HINDI_VERB_ROOTS:
+                continue
 
         # Vocatives: drop unless kinship/genitive use.
         if low in lex["vocatives"]:
@@ -282,6 +369,11 @@ def prune(text: str) -> tuple[str, list[DropRecord]]:
 
     kept_tokens = [t for t, k in zip(tokens, keep, strict=True) if k]
     pruned = _WS.sub(" ", " ".join(kept_tokens)).strip()
+
+    # Semantic Polarity Safety Invariant check
+    if not verify_polarity_invariant(text, pruned):
+        return text, []
+
     return pruned, drops
 
 

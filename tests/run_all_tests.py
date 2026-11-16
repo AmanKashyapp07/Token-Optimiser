@@ -139,15 +139,18 @@ def main() -> int:
                 "backend/tests/test_insights.py",
                 "backend/tests/test_compression.py",
                 "backend/tests/test_compression_evidence.py",
+                "backend/tests/test_compression_polarity.py",
                 "backend/tests/test_routing_api.py",
                 "backend/tests/test_routing_dataset.py",
                 "backend/tests/test_routing_explain.py",
                 "backend/tests/test_routing_features.py",
                 "backend/tests/test_routing_import.py",
                 "backend/tests/test_routing_training.py",
+                "backend/tests/test_routing_quadrants.py",
                 "backend/tests/test_cache.py",
                 "backend/tests/test_cache_v2.py",
                 "backend/tests/test_resilience_v2.py",
+                "backend/tests/test_eval_v3.py",
                 "backend/tests/test_health.py",
                 "-W", "ignore::DeprecationWarning",
                 "-W", "ignore::UserWarning",
@@ -182,7 +185,7 @@ def main() -> int:
     print(f"{BOLD}{CYAN}└{'─' * 54}┴{'─' * 10}┴{'─' * 10}┘{RESET}")
 
     if all_ok:
-        print(f"\n  {GREEN}{BOLD}✔ 100% PASSING — 258 TOTAL TESTS PASSED{RESET} {DIM}(52 frontend + 206 backend){RESET}")
+        print(f"\n  {GREEN}{BOLD}✔ 100% PASSING — 284 TOTAL TESTS PASSED{RESET} {DIM}(52 frontend + 232 backend){RESET}")
         print(f"  {DIM}Total verification wall-clock time:{RESET} {BOLD}{total_time:.2f}s{RESET}")
         print(f"  {GREEN}{BOLD}The unified Token Optimiser gateway is verified and demo-ready! 🚀{RESET}\n")
         return 0

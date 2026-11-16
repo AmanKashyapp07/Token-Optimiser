@@ -1,0 +1,150 @@
+{
+  "benchmark_name": "Model Complexity Router Quadrant Benchmark",
+  "sample_size": 200,
+  "policies": {
+    "economy": {
+      "policy": "economy",
+      "sample_size": 200,
+      "correct_predictions": 156,
+      "accuracy_pct": 78.0,
+      "under_routing_rate_pct": 16.0,
+      "over_routing_rate_pct": 28.0,
+      "routed_counts": {
+        "cheap": 88,
+        "strong": 112
+      },
+      "quadrants": {
+        "short_hard": {
+          "total": 50,
+          "correct": 43,
+          "accuracy_pct": 86.0,
+          "under_routed": 7,
+          "over_routed": 0
+        },
+        "long_easy": {
+          "total": 50,
+          "correct": 50,
+          "accuracy_pct": 100.0,
+          "under_routed": 0,
+          "over_routed": 0
+        },
+        "standard_routine": {
+          "total": 50,
+          "correct": 22,
+          "accuracy_pct": 44.0,
+          "under_routed": 0,
+          "over_routed": 28
+        },
+        "standard_complex": {
+          "total": 50,
+          "correct": 41,
+          "accuracy_pct": 82.0,
+          "under_routed": 9,
+          "over_routed": 0
+        }
+      },
+      "cost_comparison": {
+        "always_cheap_cost_10k_usd": 0.27,
+        "always_quality_cost_10k_usd": 1.08,
+        "router_cost_10k_usd": 0.7236,
+        "savings_vs_always_quality_pct": 33.0
+      }
+    },
+    "balanced": {
+      "policy": "balanced",
+      "sample_size": 200,
+      "correct_predictions": 127,
+      "accuracy_pct": 63.5,
+      "under_routing_rate_pct": 6.0,
+      "over_routing_rate_pct": 67.0,
+      "routed_counts": {
+        "cheap": 39,
+        "strong": 161
+      },
+      "quadrants": {
+        "short_hard": {
+          "total": 50,
+          "correct": 44,
+          "accuracy_pct": 88.0,
+          "under_routed": 6,
+          "over_routed": 0
+        },
+        "long_easy": {
+          "total": 50,
+          "correct": 11,
+          "accuracy_pct": 22.0,
+          "under_routed": 0,
+          "over_routed": 39
+        },
+        "standard_routine": {
+          "total": 50,
+          "correct": 22,
+          "accuracy_pct": 44.0,
+          "under_routed": 0,
+          "over_routed": 28
+        },
+        "standard_complex": {
+          "total": 50,
+          "correct": 50,
+          "accuracy_pct": 100.0,
+          "under_routed": 0,
+          "over_routed": 0
+        }
+      },
+      "cost_comparison": {
+        "always_cheap_cost_10k_usd": 0.27,
+        "always_quality_cost_10k_usd": 1.08,
+        "router_cost_10k_usd": 0.922,
+        "savings_vs_always_quality_pct": 14.6
+      }
+    },
+    "quality": {
+      "policy": "quality",
+      "sample_size": 200,
+      "correct_predictions": 124,
+      "accuracy_pct": 62.0,
+      "under_routing_rate_pct": 6.0,
+      "over_routing_rate_pct": 70.0,
+      "routed_counts": {
+        "cheap": 36,
+        "strong": 164
+      },
+      "quadrants": {
+        "short_hard": {
+          "total": 50,
+          "correct": 44,
+          "accuracy_pct": 88.0,
+          "under_routed": 6,
+          "over_routed": 0
+        },
+        "long_easy": {
+          "total": 50,
+          "correct": 10,
+          "accuracy_pct": 20.0,
+          "under_routed": 0,
+          "over_routed": 40
+        },
+        "standard_routine": {
+          "total": 50,
+          "correct": 20,
+          "accuracy_pct": 40.0,
+          "under_routed": 0,
+          "over_routed": 30
+        },
+        "standard_complex": {
+          "total": 50,
+          "correct": 50,
+          "accuracy_pct": 100.0,
+          "under_routed": 0,
+          "over_routed": 0
+        }
+      },
+      "cost_comparison": {
+        "always_cheap_cost_10k_usd": 0.27,
+        "always_quality_cost_10k_usd": 1.08,
+        "router_cost_10k_usd": 0.9342,
+        "savings_vs_always_quality_pct": 13.5
+      }
+    }
+  }
+}
