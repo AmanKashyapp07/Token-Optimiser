@@ -61,6 +61,10 @@ interface ChatCompletionResponse {
     cost_saved_usd: number;
     cost_reduction_pct?: number;
     answer_source?: string;
+    allocated_max_tokens?: number;
+    budget_strategy?: string;
+    coalesced?: boolean;
+    fallback_applied?: boolean;
   };
   trace: ExecutionTrace;
 }
@@ -478,17 +482,46 @@ export function StudioPage() {
                   </div>
                 )}
 
-                {/* Stage 4: Provider Response & Output Capping */}
+                {/* Stage 4: ML-Powered Adaptive Token Budgeting */}
+                {!result.optimisation.cache_hit && (
+                  <div className="rounded-xl border border-line bg-white/70 p-3.5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-800">4</span>
+                        <span className="text-xs font-bold text-ink">ML Adaptive Token Budgeting</span>
+                      </div>
+                      <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px]">
+                        Budget: {result.optimisation.allocated_max_tokens || 40} tokens ({result.optimisation.budget_strategy || 'ridge_adaptive_95'})
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted">
+                      Ridge regression with 95% prediction interval (&ycirc; + 1.645&sigma;) prevents premature truncation on complex queries.
+                    </p>
+                  </div>
+                )}
+
+                {/* Stage 5: Provider Response, Singleflight Coalescing & Output Capping */}
                 <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50/50 p-4 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">4</span>
-                      <span className="text-xs font-bold text-emerald-950">Inference Response &amp; Output Capping</span>
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">5</span>
+                      <span className="text-xs font-bold text-emerald-950">Inference Response &amp; Concurrency</span>
                     </div>
                     <div className="flex gap-1.5">
-                      <Badge className="bg-emerald-700 text-white text-[10px]">
-                        {result.choices[0]?.finish_reason === 'length' ? 'Capped (max_tokens)' : 'Finished (stop)'}
-                      </Badge>
+                      {result.optimisation.coalesced && (
+                        <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-[10px]">
+                          Singleflight Coalesced
+                        </Badge>
+                      )}
+                      {result.optimisation.fallback_applied ? (
+                        <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px]">
+                          Fallback Fixture (Demo)
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-emerald-700 text-white text-[10px]">
+                          {result.choices[0]?.finish_reason === 'length' ? 'Capped (max_tokens)' : 'Finished (stop)'}
+                        </Badge>
+                      )}
                       <Badge variant="outline" className="text-[10px] bg-white">
                         {result.usage?.completion_tokens || 0} tokens
                       </Badge>

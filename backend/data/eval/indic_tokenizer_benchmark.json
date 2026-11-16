@@ -1,0 +1,60 @@
+{
+  "dataset_size": 15,
+  "tokenizer_benchmarks": {
+    "cl100k_base (GPT-4 / 3.5)": {
+      "avg_tokens_english": 13.2,
+      "avg_tokens_hinglish": 15.53,
+      "avg_tokens_devanagari": 65.53,
+      "inflation_ratio_hinglish": 1.18,
+      "inflation_ratio_devanagari": 4.96,
+      "tax_pct_hinglish": 17.7,
+      "tax_pct_devanagari": 396.5
+    },
+    "o200k_base (GPT-4o)": {
+      "avg_tokens_english": 13.07,
+      "avg_tokens_hinglish": 14.6,
+      "avg_tokens_devanagari": 21.73,
+      "inflation_ratio_hinglish": 1.12,
+      "inflation_ratio_devanagari": 1.66,
+      "tax_pct_hinglish": 11.7,
+      "tax_pct_devanagari": 66.3
+    },
+    "p50k_base (GPT-3 / Codex)": {
+      "avg_tokens_english": 13.6,
+      "avg_tokens_hinglish": 17.13,
+      "avg_tokens_devanagari": 106.93,
+      "inflation_ratio_hinglish": 1.26,
+      "inflation_ratio_devanagari": 7.86,
+      "tax_pct_hinglish": 26.0,
+      "tax_pct_devanagari": 686.3
+    }
+  },
+  "compression_mitigation": {
+    "avg_raw_tokens": 19.0,
+    "avg_compressed_tokens": 14.3,
+    "avg_token_reduction_pct": 24.7
+  },
+  "sample_triples": [
+    {
+      "id": "indic-001",
+      "category": "administrative",
+      "en": "How do I renew my library book online before the due date?",
+      "hi_latin": "Due date se pehle online library book renew kaise karun?",
+      "hi_deva": "अंतिम तिथि से पहले ऑनलाइन लाइब्रेरी की किताब कैसे रिन्यू करें?"
+    },
+    {
+      "id": "indic-002",
+      "category": "academics",
+      "en": "Where can I find the exam schedule and timetable for this semester?",
+      "hi_latin": "Is semester ka exam schedule aur timetable kahan milega?",
+      "hi_deva": "इस सेमेस्टर का परीक्षा कार्यक्रम और समय सारणी कहाँ मिलेगी?"
+    },
+    {
+      "id": "indic-003",
+      "category": "technical",
+      "en": "My campus Wi-Fi connection keeps dropping on the second floor.",
+      "hi_latin": "Second floor pe campus Wi-Fi bar bar disconnect ho raha hai.",
+      "hi_deva": "दूसरी मंजिल पर कैंपस वाई-फाई बार-बार डिस्कनेक्ट हो रहा है।"
+    }
+  ]
+}
