@@ -114,7 +114,7 @@ $$\text{Cost per 10k Successful Tasks} = \frac{\sum_{i=1}^{N} \text{Cost}_i}{\te
 
 To test whether optimization preserves utility, we benchmarked the gateway across **250 prompts spanning 7 domains** (`general_knowledge`, `coding`, `reasoning`, `summarization`, `json_generation`, `indic_hinglish`, `complex_qa`).
 
-*Empirical Results from `scripts/run_eval_v2.py`:*
+*Empirical Results from `tests/benchmarks/run_eval_v2.py`:*
 
 | Evaluation Domain | Prompts | Baseline Tokens | Optimised Tokens | Raw Token Reduction | Task Success Rate | Status |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -144,7 +144,7 @@ Before evaluating vector distance, candidate matches must pass deterministic com
 * **Temporal Divergence:** Blocks temporal mismatches (e.g. "today's schedule" vs "yesterday's schedule").
 * **Structural Format Isolation:** "JSON only" never returns "bullet points".
 
-*Empirical Results from `scripts/evaluate_cache_fpr.py` (Tested across 20 subtle semantic trap pairs):*
+*Empirical Results from `tests/benchmarks/evaluate_cache_fpr.py` (Tested across 20 subtle semantic trap pairs):*
 
 | Metric | Measured Score | Operational Significance |
 | :--- | :---: | :--- |
@@ -164,7 +164,7 @@ $$\text{Allocated Budget} = \hat{y} + 1.645 \cdot \sigma$$
 * Features: Lexical length, character count, structural difficulty, format directives, and code-mixing ratio.
 * Floor: 35 tokens • Ceiling: 300 tokens • Confidence: 95% one-sided upper prediction bound.
 
-*Comparative Truncation Benchmark (`scripts/benchmark_adaptive_budgeting.py`):*
+*Comparative Truncation Benchmark (`tests/benchmarks/benchmark_adaptive_budgeting.py`):*
 
 | Budgeting Strategy | Output Tokens | Premature Truncation Rate | Cost / 10k Successful Tasks |
 | :--- | :---: | :---: | :---: |
@@ -202,7 +202,7 @@ For multi-container clusters (Kubernetes pods / ECS), [`distributed_singleflight
 
 Tokenizer vocabularies heavily bias toward English, imposing an **Indic Token Tax** on South Asian languages. We benchmarked parallel sentence triples across standard foundation model tokenizers:
 
-*Empirical Results from `scripts/benchmark_indic_tokenizers.py`:*
+*Empirical Results from `tests/benchmarks/benchmark_indic_tokenizers.py`:*
 
 | Tokenizer | English Baseline | Romanized Hinglish | Devanagari Hindi | Hindi Token Tax |
 | :--- | :---: | :---: | :---: | :---: |
