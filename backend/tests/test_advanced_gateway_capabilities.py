@@ -10,6 +10,7 @@ import asyncio
 import time
 
 import pytest
+from fastapi.testclient import TestClient
 
 from gateway.core.benchmarking import run_gateway_benchmark
 from gateway.core.resilience import TimeoutContext, async_retry_with_backoff
@@ -65,6 +66,38 @@ def test_cache_invalidation_api_endpoint(client):
     lookup_res = client.post("/api/v1/cache/lookup", json={"text": "How can I renew a library book?"})
     assert lookup_res.status_code == 200
     assert lookup_res.json().get("hit") is not True
+
+
+def test_tenant_cache_eviction_authorization(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    """In production environment, mutating or clearing tenant cache requires authentication."""
+    import gateway.features.cache.api as cache_api
+    from gateway.core.config import Settings
+
+    prod_settings = Settings(environment="production", api_key="secret-admin-key")
+    monkeypatch.setattr(cache_api, "get_settings", lambda: prod_settings)
+
+    # 1. Unauthenticated purge attempt on tenant scope must fail with 401
+    unauth_res = client.post(
+        "/api/v1/cache/invalidate",
+        json={"scope": "tenant-finance", "purge_all": True},
+    )
+    assert unauth_res.status_code == 401
+
+    # 2. Wrong API key must fail with 403
+    forbidden_res = client.post(
+        "/api/v1/cache/invalidate",
+        json={"scope": "tenant-finance", "purge_all": True},
+        headers={"X-API-Key": "wrong-key"},
+    )
+    assert forbidden_res.status_code == 403
+
+    # 3. Valid admin key passes auth
+    auth_res = client.post(
+        "/api/v1/cache/invalidate",
+        json={"scope": "tenant-finance", "purge_all": True},
+        headers={"X-API-Key": "secret-admin-key"},
+    )
+    assert auth_res.status_code == 200
 
 
 # ==============================================================================

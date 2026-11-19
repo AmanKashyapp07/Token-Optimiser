@@ -12,12 +12,16 @@ Also evaluates the mitigation effect of Token Optimiser's prompt compression eng
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+BACKEND_SRC = ROOT / "backend" / "src"
+if str(BACKEND_SRC) not in sys.path:
+    sys.path.insert(0, str(BACKEND_SRC))
 
 import tiktoken
 from gateway.features.compression.service import get_service as get_compression_service
-
-ROOT = Path(__file__).resolve().parents[2]
 OUT_FILE = ROOT / "backend" / "data" / "eval" / "indic_tokenizer_benchmark.json"
 
 PARALLEL_DATASET = [

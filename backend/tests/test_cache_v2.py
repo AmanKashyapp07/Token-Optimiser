@@ -78,6 +78,18 @@ def cache():
             format_constraint="none",
         )
     )
+    two_layer.insert(
+        CachedEntryMetadata(
+            cache_id=106,
+            question="What is the capital of France?",
+            normalized=normalize_query_text("What is the capital of France?"),
+            answer="The capital of France is Paris.",
+            scope_id="public",
+            model_id="auto",
+            system_prompt_hash="none",
+            format_constraint="none",
+        )
+    )
     return two_layer
 
 
@@ -169,6 +181,28 @@ def test_temporal_divergence_rejection(cache: TwoLayerContextCache, divergent_te
     )
     assert res["hit"] is False
     assert res["match_type"] == "none"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("divergent_country", "should_hit"),
+    [
+        ("Germany", False),
+        ("Italy", False),
+        ("Spain", False),
+        ("France", True),
+    ],
+)
+def test_named_entity_divergence_rejection(
+    cache: TwoLayerContextCache, divergent_country: str, should_hit: bool
+):
+    """France vs other sovereign nations must be rejected by named-entity gate."""
+    res = cache.lookup(
+        query=f"What is the capital of {divergent_country}?",
+        scope_id="public",
+        threshold_override=0.50,
+    )
+    assert res["hit"] is should_hit
 
 
 @pytest.mark.unit

@@ -84,6 +84,19 @@ _AFFIRMATIVE_ANTONYMS = {
     "without": "with",
 }
 
+_COMMON_STOP_WORDS = frozenset({
+    "what", "where", "when", "why", "who", "how", "which", "explain", "describe",
+    "tell", "write", "list", "give", "can", "could", "would", "is", "are", "do",
+    "does", "did", "please", "show", "provide", "find", "calculate", "summarize",
+    "compare", "difference", "between", "the", "a", "an", "in", "on", "of", "to",
+    "for", "with", "about", "and", "or", "me", "you", "my", "your", "his", "her",
+})
+
+_QUANTIFIER_RE = re.compile(
+    r"\b(?:top|first|last|best|\d+)\s*(?:examples?|points?|reasons?|bullets?|items?|ways?|steps?)\b",
+    re.IGNORECASE,
+)
+
 
 def normalize_query_text(text: str) -> str:
     """Canonical string normalization: NFKC unicode, lowercase, collapse whitespace, drop punctuation."""
@@ -154,12 +167,14 @@ class CriticalEntities:
     ids: frozenset[str]
     numbers: frozenset[str]
     negations: frozenset[str]
+    named_entities: frozenset[str] = frozenset()
+    quantifiers: frozenset[str] = frozenset()
 
 
 class ContextCompatibilityGate:
     """Validates whether a candidate semantic cache entry is safe to return.
 
-    Enforces 7 strict semantic invariant checks to prevent false cache hits:
+    Enforces 9 strict semantic invariant checks to prevent false cache hits:
     1. System instructions must hash identically.
     2. Format constraints must match (e.g. JSON vs 3 bullets).
     3. Target programming languages must be identical (e.g. Python vs Java).
@@ -167,6 +182,8 @@ class ContextCompatibilityGate:
     5. Specific assignment / course IDs must match (e.g. CS 101 Assignment 1 vs 2).
     6. Numerical tokens must be congruent (e.g. 10% of 200 vs 10% of 500).
     7. Negation and antonym polarity must match (e.g. successful vs unsuccessful).
+    8. Named entities and proper nouns must match (e.g. France vs Germany, Apple vs Microsoft).
+    9. Quantifier phrases must match (e.g. top 5 vs top 10).
     """
 
     @staticmethod
@@ -197,6 +214,15 @@ class ContextCompatibilityGate:
         numbers = set(_NUMERIC_TOKEN_RE.findall(lowered))
         negations = words & _NEGATION_TOKENS
 
+        # Extract capitalized named entities (excluding common sentence starters)
+        raw_cap_tokens = re.findall(r"\b[A-Z][a-zA-Z0-9_-]+\b", text)
+        named_entities = {
+            t.lower()
+            for t in raw_cap_tokens
+            if t.lower() not in _COMMON_STOP_WORDS and len(t) > 1
+        }
+        quantifiers = set(_QUANTIFIER_RE.findall(lowered))
+
         return {
             "words": words,
             "langs": langs,
@@ -207,6 +233,8 @@ class ContextCompatibilityGate:
             "ids": id_matches,
             "numbers": numbers,
             "negations": negations,
+            "named_entities": named_entities,
+            "quantifiers": quantifiers,
         }
 
     @classmethod
@@ -295,6 +323,20 @@ class ContextCompatibilityGate:
         if req_ent["numbers"] or cand_ent["numbers"]:
             if req_ent["numbers"] != cand_ent["numbers"]:
                 return False, f"Numerical divergence: {req_ent['numbers']} vs {cand_ent['numbers']}"
+
+        # Check named entities / proper nouns divergence (e.g. France vs Germany)
+        req_ne = req_ent.get("named_entities", set())
+        cand_ne = cand_ent.get("named_entities", set())
+        if req_ne or cand_ne:
+            if req_ne and cand_ne and req_ne != cand_ne:
+                return False, f"Named entity divergence: {req_ne} vs {cand_ne}"
+
+        # Check quantifier divergence (e.g. top 5 vs top 10)
+        req_q = req_ent.get("quantifiers", set())
+        cand_q = cand_ent.get("quantifiers", set())
+        if req_q or cand_q:
+            if req_q != cand_q:
+                return False, f"Quantifier divergence: {req_q} vs {cand_q}"
 
         return True, "compatible"
 

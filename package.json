@@ -19,6 +19,7 @@
     "test:resilience": ".venv/bin/python -m pytest -m resilience",
     "test:fast": ".venv/bin/python -m pytest -m 'unit or resilience'",
     "benchmark": "python3 tests/benchmarks/benchmark_gateway.py",
+    "benchmark:all": ".venv/bin/python tests/benchmarks/run_all_benchmarks.py",
     "check": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {

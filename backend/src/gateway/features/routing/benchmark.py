@@ -107,3 +107,44 @@ def evaluate_routing_policy(
             "savings_vs_always_quality_pct": round(cost_savings_vs_quality_pct, 1),
         },
     }
+
+
+def evaluate_length_baseline(
+    items: list[dict[str, Any]], word_threshold: int = 25
+) -> dict[str, Any]:
+    """Evaluates a naive length-only routing heuristic as an ablation baseline."""
+    correct_count = 0
+    total_items = len(items)
+    total_strong_truth = 0
+    total_cheap_truth = 0
+    false_cheap_count = 0
+    false_strong_count = 0
+
+    for item in items:
+        target = item["target_tier"]
+        prompt = item["prompt"]
+        if target == "cheap":
+            total_cheap_truth += 1
+        else:
+            total_strong_truth += 1
+
+        pred_tier = "strong" if len(prompt.split()) > word_threshold else "cheap"
+        if pred_tier == target:
+            correct_count += 1
+        elif target == "strong" and pred_tier == "cheap":
+            false_cheap_count += 1
+        elif target == "cheap" and pred_tier == "strong":
+            false_strong_count += 1
+
+    return {
+        "baseline": f"length_threshold_{word_threshold}_words",
+        "sample_size": total_items,
+        "correct_predictions": correct_count,
+        "accuracy_pct": round((correct_count / total_items) * 100, 1),
+        "under_routing_rate_pct": round(
+            (false_cheap_count / total_strong_truth) * 100 if total_strong_truth else 0.0, 1
+        ),
+        "over_routing_rate_pct": round(
+            (false_strong_count / total_cheap_truth) * 100 if total_cheap_truth else 0.0, 1
+        ),
+    }

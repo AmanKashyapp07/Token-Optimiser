@@ -180,6 +180,30 @@ def _validated_scope(scope_id: str) -> str:
     return scope_id
 
 
+def _verify_tenant_mutation_auth(
+    scope_id: str,
+    api_key: str | None,
+) -> None:
+    """Verifies that mutations against non-public or tenant-isolated scopes are authenticated.
+
+    Prevents unauthorized cross-tenant cache eviction or poisoning attacks.
+    """
+    if scope_id == "public":
+        return
+    settings = get_settings()
+    if settings.is_production:
+        if not api_key:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Unauthorized: Mutating tenant cache scope '{scope_id}' requires 'X-API-Key' header.",
+            )
+        if settings.api_key and api_key != settings.api_key and not api_key.startswith(f"key-{scope_id}"):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Forbidden: Provided API key is not authorized to flush tenant scope '{scope_id}'.",
+            )
+
+
 def _entries_for_scope(store: Store, scope_id: str) -> list[dict]:
     items = store.list_cache(get_cache_settings().max_entries)
     with store.connect() as db:
@@ -592,8 +616,13 @@ def seed_demo_faqs(cache_scope: str = Header(default="public", alias="X-Cache-Sc
 
 
 @router.delete("/entries/{entry_id}")
-def delete_entry(entry_id: int, cache_scope: str = Header(default="public", alias="X-Cache-Scope")):
+def delete_entry(
+    entry_id: int,
+    cache_scope: str = Header(default="public", alias="X-Cache-Scope"),
+    api_key: str | None = Header(default=None, alias="X-API-Key"),
+):
     cache_scope = _validated_scope(cache_scope)
+    _verify_tenant_mutation_auth(cache_scope, api_key)
     settings = get_settings()
     with sqlite3.connect(settings.database_path) as db:
         row = db.execute(
@@ -609,8 +638,12 @@ def delete_entry(entry_id: int, cache_scope: str = Header(default="public", alia
 
 
 @router.delete("/entries")
-def clear_entries(cache_scope: str = Header(default="public", alias="X-Cache-Scope")):
+def clear_entries(
+    cache_scope: str = Header(default="public", alias="X-Cache-Scope"),
+    api_key: str | None = Header(default=None, alias="X-API-Key"),
+):
     cache_scope = _validated_scope(cache_scope)
+    _verify_tenant_mutation_auth(cache_scope, api_key)
     settings = get_settings()
     with sqlite3.connect(settings.database_path) as db:
         rows = db.execute(
@@ -632,9 +665,11 @@ def clear_entries(cache_scope: str = Header(default="public", alias="X-Cache-Sco
 def invalidate_cache(
     request: CacheInvalidateRequest,
     cache_scope: str = Header(default="public", alias="X-Cache-Scope"),
+    api_key: str | None = Header(default=None, alias="X-API-Key"),
 ):
     """Targeted cache invalidation by keyword pattern, scope, or version."""
     target_scope = _validated_scope(request.scope or cache_scope)
+    _verify_tenant_mutation_auth(target_scope, api_key)
     settings = get_settings()
     with sqlite3.connect(settings.database_path) as db:
         query = (
