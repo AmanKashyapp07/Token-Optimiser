@@ -78,9 +78,9 @@ Evaluated across a standardized 250-task multi-domain benchmark grounded in cano
 
 Reporting cache savings purely on hits is a tautology (hits cost almost nothing). The true economic return of a caching gateway depends on the traffic hit rate ($p_{\text{hit}}$) balanced against the latency and compute overhead of misses:
 
-$$E[\text{Cost}] = p_{\text{hit}} \cdot \text{Cost}_{\text{hit}} + (1 - p_{\text{hit}}) \cdot (\text{Cost}_{\text{LLM}} + \text{Cost}_{\text{miss\_overhead}})$$
+$$E[\text{Cost}] = p_{\text{hit}} \cdot \text{Cost}_{\text{hit}} + (1 - p_{\text{hit}}) \cdot (\text{Cost}_{\text{LLM}} + \text{Cost}_{\text{miss}})$$
 
-$$E[\text{Savings}] = p_{\text{hit}} \cdot (\text{Cost}_{\text{LLM}} - \text{Cost}_{\text{hit}}) - (1 - p_{\text{hit}}) \cdot \text{Cost}_{\text{miss\_overhead}}$$
+$$E[\text{Savings}] = p_{\text{hit}} \cdot (\text{Cost}_{\text{LLM}} - \text{Cost}_{\text{hit}}) - (1 - p_{\text{hit}}) \cdot \text{Cost}_{\text{miss}}$$
 
 Sensitivity analysis across realistic enterprise production traffic mixes (assuming blended upstream LLM baseline of \$13.85 / 10k requests [\$1,385.00 / 1M requests], cache hit cost of \$0.01 / 10k requests, and \$0.0020 / 10k miss lookup overhead):
 
