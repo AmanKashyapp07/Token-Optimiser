@@ -28,7 +28,7 @@ def main() -> None:
     existing = call("kernels.KernelsApiService", "ListKernels", {"user": owner, "pageSize": 100})
     if any(row.get("ref") == args.slug for row in existing.get("kernels", [])):
         raise RuntimeError("Notebook already exists; refusing to overwrite it.")
-    manifest = json.loads((ROOT / "docs/source-manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((ROOT / "backend/data/manifests/source-manifest.json").read_text(encoding="utf-8"))
     source = (Path(__file__).parent / "kaggle_pilot.py").read_text(encoding="utf-8")
     source = source.replace('if __name__ == "__main__":',
                             f'RESEARCH_MANIFEST = {manifest!r}\n\nif __name__ == "__main__":')

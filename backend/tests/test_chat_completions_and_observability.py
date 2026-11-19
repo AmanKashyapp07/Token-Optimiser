@@ -4,23 +4,20 @@
 3. Provider Architecture (Timeouts, retries, standardized exceptions, token counting)
 4. Observability (Request IDs, Execution Traces, Latency Spans, and GET /api/v1/traces/{id})
 """
+
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
 
-from gateway.app import app
 from gateway.core.resilience import get_circuit_breaker
 
-
-@pytest.fixture(scope="module")
-def client():
-    return TestClient(app)
+pytestmark = [pytest.mark.e2e]
 
 
 # ==============================================================================
 # Task 2: Unified Inference API (/v1/chat/completions)
 # ==============================================================================
+
 
 def test_chat_completions_openai_compatible_schema(client):
     """The /v1/chat/completions endpoint conforms to the OpenAI specification."""
@@ -54,7 +51,10 @@ def test_chat_completions_openai_compatible_schema(client):
         assert "usage" in data
         assert data["usage"]["prompt_tokens"] > 0
         assert data["usage"]["completion_tokens"] > 0
-        assert data["usage"]["total_tokens"] == data["usage"]["prompt_tokens"] + data["usage"]["completion_tokens"]
+        assert (
+            data["usage"]["total_tokens"]
+            == data["usage"]["prompt_tokens"] + data["usage"]["completion_tokens"]
+        )
 
         # Gateway optimization extensions
         assert "optimisation" in data
@@ -85,6 +85,7 @@ def test_chat_completions_semantic_cache_hit(client):
 # ==============================================================================
 # Task 1 & 3: Correctness, Output Capping & Provider Truncation
 # ==============================================================================
+
 
 def test_chat_completions_strict_output_capping(client):
     """Enforcing a tight max_tokens boundary truncates completion and sets finish_reason='length'."""
@@ -130,6 +131,7 @@ def test_chat_completions_resilience_circuit_breaker(client):
 # ==============================================================================
 # Task 4: Observability, Execution Traces & Retrieval
 # ==============================================================================
+
 
 def test_execution_trace_generation_and_retrieval(client):
     """Every completion generates a structured trace retrievable via /api/v1/traces/{id}."""
@@ -217,4 +219,3 @@ def test_chat_completions_multi_turn_history_and_system_prompt(client):
     trace = data["trace"]
     comp_stage = next(s for s in trace["stages"] if s["stage"] == "prompt_compression")
     assert comp_stage["status"] == "applied"
-

@@ -1,4 +1,5 @@
 """Studio post-run literal checks, not Kaggle/model research validation."""
+
 import hashlib
 import json
 from pathlib import Path
@@ -47,13 +48,25 @@ def test_real_lost_phrase_retains_original_and_candidate(method):
     assert not result["budget_met"]
     assert result["removed_spans"] == result["added_spans"] == result["drop_records"] == []
     candidate = result["compression_candidate"]
-    for field in ("compressed", "method", "compressed_tokens", "removed_spans", "added_spans", "drop_records", "fallback_reason"):
+    for field in (
+        "compressed",
+        "method",
+        "compressed_tokens",
+        "removed_spans",
+        "added_spans",
+        "drop_records",
+        "fallback_reason",
+    ):
         assert candidate[field] == baseline[field]
     assert not candidate["protected_preserved"]
     assert result["protected_preserved"]
     assert result["phrase_checks"][0] == {
-        "text": "yaar", "source_occurrences": 1, "candidate_occurrences": 0,
-        "output_occurrences": 1, "preserved_in_candidate": False, "preserved_in_output": True,
+        "text": "yaar",
+        "source_occurrences": 1,
+        "candidate_occurrences": 0,
+        "output_occurrences": 1,
+        "preserved_in_candidate": False,
+        "preserved_in_output": True,
     }
     assert result["phrase_checks"][1]["preserved_in_candidate"]
 
@@ -84,8 +97,12 @@ def test_occurrence_loss_even_with_one_copy_remaining(monkeypatch):
     # Explicit QA-only candidate to exercise multiplicity, not a model result.
     service = CompressionService()
     text = "deadline deadline"
-    candidate = CompressResult(original=text, compressed="deadline", method="heuristic",
-                               drops=[DropRecord(token="deadline", category="qa", rule="injected test candidate")])
+    candidate = CompressResult(
+        original=text,
+        compressed="deadline",
+        method="heuristic",
+        drops=[DropRecord(token="deadline", category="qa", rule="injected test candidate")],
+    )
     monkeypatch.setattr(service.compressor, "compress_heuristic", Mock(return_value=candidate))
     result = service.analyze(text, protected_phrases=["deadline"])
     assert result["protection_fallback"]
@@ -103,7 +120,7 @@ def test_unicode_literal_offsets_and_overlapping_selections(method):
     result = get_service().analyze(text, method, protected_phrases=phrases)
     selected = [span for span in result["protected_spans"] if span["kind"] == "user_phrase"]
     assert len(selected) == len(phrases)
-    assert all(text[span["start"]:span["end"]] == span["text"] for span in selected)
+    assert all(text[span["start"] : span["end"]] == span["text"] for span in selected)
     assert next(span["start"] for span in selected if span["text"] == "मेरा") == 2
     assert all(check["preserved_in_output"] for check in result["phrase_checks"])
 
@@ -113,11 +130,13 @@ def test_regex_metacharacters_and_spaces_are_literals():
     result = get_service().analyze(text, protected_phrases=["a+b.*", " wifi "])
     assert result["protected_phrases"] == ["a+b.*", " wifi "]
     assert all(check["preserved_in_output"] for check in result["phrase_checks"])
-    assert all(text[span["start"]:span["end"]] == span["text"] for span in result["protected_spans"])
+    assert all(text[span["start"] : span["end"]] == span["text"] for span in result["protected_spans"])
 
 
 def test_duplicates_are_deduplicated_not_inferred_twice(client):
-    response = client.post("/api/v1/compression/analyze", json={"text": "wifi wifi", "protected_phrases": ["wifi", "wifi"]})
+    response = client.post(
+        "/api/v1/compression/analyze", json={"text": "wifi wifi", "protected_phrases": ["wifi", "wifi"]}
+    )
     assert response.status_code == 200
     result = response.json()
     assert result["protected_phrases"] == ["wifi"]
@@ -125,9 +144,13 @@ def test_duplicates_are_deduplicated_not_inferred_twice(client):
     assert result["phrase_checks"][0]["source_occurrences"] == 2
 
 
-@pytest.mark.parametrize("phrases", [[""], [" \t"], ["Wifi"], ["missing"], ["x" * 201], ["wifi"] * 21, [123], "wifi", None])
+@pytest.mark.parametrize(
+    "phrases", [[""], [" \t"], ["Wifi"], ["missing"], ["x" * 201], ["wifi"] * 21, [123], "wifi", None]
+)
 def test_invalid_selection_api_returns_422(client, phrases):
-    response = client.post("/api/v1/compression/analyze", json={"text": "wifi " + "x" * 201, "protected_phrases": phrases})
+    response = client.post(
+        "/api/v1/compression/analyze", json={"text": "wifi " + "x" * 201, "protected_phrases": phrases}
+    )
     assert response.status_code == 422
 
 
@@ -142,7 +165,9 @@ def test_direct_service_validation_before_execution(monkeypatch):
 
 def test_maximum_phrase_size_and_count_accepted(client):
     phrases = [str(index) + "x" * (200 - len(str(index))) for index in range(20)]
-    response = client.post("/api/v1/compression/analyze", json={"text": " ".join(phrases), "protected_phrases": phrases})
+    response = client.post(
+        "/api/v1/compression/analyze", json={"text": " ".join(phrases), "protected_phrases": phrases}
+    )
     assert response.status_code == 200
     assert len(response.json()["phrase_checks"]) == 20
 
@@ -166,18 +191,33 @@ def test_model_fallback_remains_in_candidate(tmp_path):
     assert "unavailable" in result["compression_candidate"]["fallback_reason"]
 
 
-@pytest.mark.parametrize("text,kept,lost", [
-    pytest.param(SAMPLES[0]["text"], "user@example.com", "yaar", id="hinglish-upstream-preset"),
-    pytest.param(SAMPLES[1]["text"], "wifi", "like", id="english-upstream-preset"),
-    # Authored local QA cases, not a research evaluation dataset.
-    pytest.param("yaar basically mera wifi nahi chal raha, user@example.com par update bhejo na",
-                 "nahi", "yaar", id="hinglish-negation-qa"),
-    pytest.param("hello sir, never change user@example.com; just check the report",
-                 "never", "hello", id="english-negation-qa"),
-    pytest.param("yaar yaar mera wifi slow hai", "wifi", "yaar", id="hinglish-repeated-qa"),
-    pytest.param("wifi is slow, like really slow, like painfully slow, fix it",
-                 "wifi", "like", id="english-repeated-qa"),
-])
+@pytest.mark.parametrize(
+    "text,kept,lost",
+    [
+        pytest.param(SAMPLES[0]["text"], "user@example.com", "yaar", id="hinglish-upstream-preset"),
+        pytest.param(SAMPLES[1]["text"], "wifi", "like", id="english-upstream-preset"),
+        # Authored local QA cases, not a research evaluation dataset.
+        pytest.param(
+            "yaar basically mera wifi nahi chal raha, user@example.com par update bhejo na",
+            "nahi",
+            "yaar",
+            id="hinglish-negation-qa",
+        ),
+        pytest.param(
+            "hello sir, never change user@example.com; just check the report",
+            "never",
+            "hello",
+            id="english-negation-qa",
+        ),
+        pytest.param("yaar yaar mera wifi slow hai", "wifi", "yaar", id="hinglish-repeated-qa"),
+        pytest.param(
+            "wifi is slow, like really slow, like painfully slow, fix it",
+            "wifi",
+            "like",
+            id="english-repeated-qa",
+        ),
+    ],
+)
 @pytest.mark.parametrize("method", ["heuristic", "crf"])
 def test_both_languages_through_api(client, text, kept, lost, method):
     payload = {"text": text, "method": method, "budget": 0.6}
@@ -215,24 +255,42 @@ def test_both_languages_through_api(client, text, kept, lost, method):
     assert not check["preserved_in_candidate"]
     assert check["preserved_in_output"]
     assert check["output_occurrences"] == text.count(lost)
-    assert all(text[span["start"]:span["end"]] == span["text"] for span in guarded["protected_spans"])
+    assert all(text[span["start"] : span["end"]] == span["text"] for span in guarded["protected_spans"])
 
     passthrough = run(budget=1, protected_phrases=[lost])
     assert passthrough["method"] == "passthrough"
     assert passthrough["compressed"] == text
     assert not passthrough["protection_fallback"]
-    assert client.post("/api/v1/compression/analyze", json={
-        **payload, "protected_phrases": [lost.upper()],
-    }).status_code == 422
+    assert (
+        client.post(
+            "/api/v1/compression/analyze",
+            json={
+                **payload,
+                "protected_phrases": [lost.upper()],
+            },
+        ).status_code
+        == 422
+    )
 
 
 def test_research_dependencies_still_match_pinned_manifest():
     root = Path(__file__).resolve().parents[2]
-    manifest = json.loads((root / "docs/source-manifest.json").read_text(encoding="utf-8"))
-    rows = [row for row in manifest["files"] if row["destination"].startswith((
-        "backend/src/gateway/modules/m2_compressor/", "backend/src/gateway/lexicons/",
-        "backend/data/models/", "backend/data/tfidf/",
-    )) or row["destination"] in {"backend/src/gateway/schemas.py", "backend/src/gateway/tokenizer.py"}]
+    manifest = json.loads((root / "backend/data/manifests/source-manifest.json").read_text(encoding="utf-8"))
+    rows = [
+        row
+        for row in manifest["files"]
+        if row["destination"].startswith(
+            (
+                "backend/src/gateway/modules/m2_compressor/",
+                "backend/src/gateway/lexicons/",
+                "backend/data/models/",
+                "backend/data/tfidf/",
+            )
+        )
+        or row["destination"] in {"backend/src/gateway/schemas.py", "backend/src/gateway/tokenizer.py"}
+    ]
     assert rows
     for row in rows:
-        assert hashlib.sha256((root / row["destination"]).read_bytes()).hexdigest() == row["sha256"], row["destination"]
+        assert hashlib.sha256((root / row["destination"]).read_bytes()).hexdigest() == row["sha256"], row[
+            "destination"
+        ]

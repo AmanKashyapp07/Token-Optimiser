@@ -3,12 +3,18 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from gateway.features.routing.benchmark import evaluate_routing_policy
 from gateway.features.routing.service import RoutingService
 
+pytestmark = [pytest.mark.unit]
+
 
 def test_routing_benchmark_dataset_integrity():
-    dataset_file = Path(__file__).resolve().parents[2] / "backend" / "data" / "eval" / "routing_benchmark_200.jsonl"
+    dataset_file = (
+        Path(__file__).resolve().parents[2] / "backend" / "data" / "eval" / "routing_benchmark_200.jsonl"
+    )
     assert dataset_file.exists(), f"Missing dataset: {dataset_file}"
 
     records = []
@@ -49,7 +55,9 @@ def test_standard_complex_routing_behavior():
 
 
 def test_policy_monotonicity_and_under_routing():
-    dataset_file = Path(__file__).resolve().parents[2] / "backend" / "data" / "eval" / "routing_benchmark_200.jsonl"
+    dataset_file = (
+        Path(__file__).resolve().parents[2] / "backend" / "data" / "eval" / "routing_benchmark_200.jsonl"
+    )
     items = []
     with open(dataset_file, "r", encoding="utf-8") as f:
         for line in f:

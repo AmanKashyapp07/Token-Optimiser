@@ -1,36 +1,59 @@
+"""Reference Token Counter for the Token Optimiser gateway.
+
+Calculates exact token counts using OpenAI's `tiktoken` BPE tokenizer (`cl100k_base` or `o200k_base`)
+when installed, gracefully falling back to a deterministic whitespace heuristic for offline CPU environments.
+"""
+
 from __future__ import annotations
 
+import logging
 import re
+from typing import Any
+
+logger = logging.getLogger("gateway.tokenizer")
 
 _WS = re.compile(r"\s+")
 
 
 class TokenCounter:
-    """Count tokens; uses tiktoken when available, else a whitespace heuristic.
+    """Calculates prompt and completion tokens with exact BPE subword segmentation.
 
-    Costs are tokenizer-dependent — tiktoken vs whitespace can differ ~1.5× on
-    Hinglish (see /v1/tokenizer/report). All cost numbers are therefore
-    approximate; treat as lower-bound when whitespace is active.
+    Attributes:
+        encoding: Tiktoken encoding name (default 'cl100k_base').
+        _enc: Loaded tiktoken Encoding instance or None if unavailable.
     """
 
     def __init__(self, encoding: str = "cl100k_base") -> None:
         self.encoding = encoding
-        self._enc = self._load_encoding()
+        self._enc = self._load_encoding(encoding)
 
     @staticmethod
-    def _load_encoding():
+    def _load_encoding(encoding: str) -> Any | None:
+        """Attempts to load the specified tiktoken encoding."""
         try:
             import tiktoken
 
-            return tiktoken.get_encoding("cl100k_base")
-        except Exception:
+            return tiktoken.get_encoding(encoding)
+        except Exception as exc:
+            logger.debug("Tiktoken encoding '%s' not loaded, using whitespace heuristic: %s", encoding, exc)
             return None
 
     @property
     def backend(self) -> str:
-        return "tiktoken_cl100k_base" if self._enc is not None else "whitespace"
+        """Returns the active tokenization backend identifier."""
+        return f"tiktoken_{self.encoding}" if self._enc is not None else "whitespace"
 
     def count(self, text: str) -> int:
+        """Counts the number of tokens in the given text string.
+
+        Args:
+            text: Raw input text.
+
+        Returns:
+            Integer token count.
+        """
+        if not text:
+            return 0
         if self._enc is not None:
             try:
                 return len(self._enc.encode(text))

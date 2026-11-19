@@ -12,7 +12,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:all": "python3 tests/run_all_tests.py",
-    "test:backend": "pytest",
+    "test:backend": ".venv/bin/python -m pytest",
+    "test:unit": ".venv/bin/python -m pytest -m unit",
+    "test:integration": ".venv/bin/python -m pytest -m integration",
+    "test:e2e": ".venv/bin/python -m pytest -m e2e",
+    "test:resilience": ".venv/bin/python -m pytest -m resilience",
+    "test:fast": ".venv/bin/python -m pytest -m 'unit or resilience'",
     "benchmark": "python3 tests/benchmarks/benchmark_gateway.py",
     "check": "npm run typecheck && npm run test && npm run build"
   },

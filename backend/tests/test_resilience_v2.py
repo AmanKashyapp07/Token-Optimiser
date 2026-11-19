@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import pytest
-from fastapi.testclient import TestClient
 
-from gateway.app import app
 from gateway.core.config import Settings
 from gateway.core.resilience import (
     CircuitBreaker,
@@ -20,15 +18,13 @@ from gateway.features.cache.distributed_singleflight import (
     MockRedisClient,
 )
 
-
-@pytest.fixture
-def client():
-    return TestClient(app)
+pytestmark = [pytest.mark.resilience]
 
 
 # ==============================================================================
 # 1. Singleflight Leader-Follower Exception & Cancellation Concurrency Tests
 # ==============================================================================
+
 
 @pytest.mark.asyncio
 async def test_singleflight_concurrent_followers_leader_failure():
@@ -45,8 +41,7 @@ async def test_singleflight_concurrent_followers_leader_failure():
     await asyncio.sleep(0.01)  # Ensure leader registers in-flight
 
     follower_tasks = [
-        asyncio.create_task(coalescer.do("test-leader-fail-key", failing_leader))
-        for _ in range(49)
+        asyncio.create_task(coalescer.do("test-leader-fail-key", failing_leader)) for _ in range(49)
     ]
 
     assert coalescer.active_in_flight == 1
@@ -141,6 +136,7 @@ async def test_singleflight_telemetry_metrics_accounting():
 # 2. Circuit Breaker Hardening & Unhandled Failure Isolation
 # ==============================================================================
 
+
 def test_circuit_breaker_without_fallback_raises_errors_and_trips():
     """When no fallback is provided, CircuitBreaker raises original error, then CircuitBreakerOpenError."""
     cb = CircuitBreaker(failure_threshold=2, recovery_timeout=0.1)
@@ -166,6 +162,7 @@ def test_circuit_breaker_without_fallback_raises_errors_and_trips():
 # ==============================================================================
 # 3. Production Failure Isolation: No Silent Fake Fixtures in Production
 # ==============================================================================
+
 
 def test_production_environment_rejects_silent_fixtures_with_http_503(client, monkeypatch):
     """In production mode, upstream provider failures return HTTP 503 instead of silent canned fixtures."""
@@ -213,6 +210,7 @@ def test_demo_environment_allows_fixture_with_x_gateway_fallback_header(client, 
 def test_successful_request_sets_x_gateway_fallback_false(client):
     """Successful normal completions explicitly declare X-Gateway-Fallback: false."""
     from gateway.core.resilience import get_circuit_breaker
+
     get_circuit_breaker().reset()
 
     payload = {
@@ -233,6 +231,7 @@ def test_successful_request_sets_x_gateway_fallback_false(client):
 # 4. Distributed Multi-Instance Architecture Blueprint Tests
 # ==============================================================================
 
+
 @pytest.mark.asyncio
 async def test_distributed_singleflight_local_fallback():
     """DistributedRequestCoalescer falls back cleanly to local singleflight when Redis is unconfigured."""
@@ -251,8 +250,7 @@ async def test_distributed_singleflight_multi_worker_cluster_coalescing():
     """Simulates 5 distributed gateway workers: exactly 1 leader executes, 4 followers receive via pub/sub."""
     mock_redis = MockRedisClient()
     workers = [
-        DistributedRequestCoalescer(redis_client=mock_redis, worker_id=f"worker-{i}")
-        for i in range(5)
+        DistributedRequestCoalescer(redis_client=mock_redis, worker_id=f"worker-{i}") for i in range(5)
     ]
 
     execution_count = 0
@@ -264,10 +262,7 @@ async def test_distributed_singleflight_multi_worker_cluster_coalescing():
         return {"answer": "Paris is the capital of France", "tokens": 7}
 
     # All 5 workers execute simultaneously on identical query
-    tasks = [
-        asyncio.create_task(w.do("cluster-query-france", expensive_llm_inference))
-        for w in workers
-    ]
+    tasks = [asyncio.create_task(w.do("cluster-query-france", expensive_llm_inference)) for w in workers]
 
     results = await asyncio.gather(*tasks)
 

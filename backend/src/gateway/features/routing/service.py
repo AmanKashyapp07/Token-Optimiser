@@ -4,11 +4,13 @@ Scores are stronger-class probabilities for authored fixture labels. They are no
 measured model correctness, savings or provider billing. No network calls are made
 and no API key is required.
 """
+
 from __future__ import annotations
 
 import json
 import math
 from dataclasses import dataclass
+from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 
@@ -24,9 +26,26 @@ from gateway.features.routing.features import (
 from gateway.features.routing.training import MODEL_NAMES
 from gateway.tokenizer import TokenCounter
 
-POLICIES: tuple[str, ...] = ("economy", "balanced", "quality")
+
+class RoutingPolicy(str, Enum):
+    """Cost-utility routing policy modes balancing cost reduction vs task quality risk."""
+
+    ECONOMY = "economy"  # Aggressively prefers cheaper model to maximize token savings
+    BALANCED = "balanced"  # Cautious policy accepting some wasted spend to minimize quality risk
+    QUALITY = "quality"  # Stricter threshold reserving weak model only for trivial prompts
+
+
+POLICIES: tuple[str, ...] = (
+    RoutingPolicy.ECONOMY.value,
+    RoutingPolicy.BALANCED.value,
+    RoutingPolicy.QUALITY.value,
+)
 # Stub thresholds, kept only for the clearly labelled starter-heuristic fallback.
-STUB_THRESHOLDS = {"economy": 0.7, "balanced": 0.5, "quality": 0.3}
+STUB_THRESHOLDS = {
+    RoutingPolicy.ECONOMY.value: 0.7,
+    RoutingPolicy.BALANCED.value: 0.5,
+    RoutingPolicy.QUALITY.value: 0.3,
+}
 METRICS_FILE = "routing_metrics.json"
 COEFFICIENTS_FILE = "routing_logreg_coefficients.json"
 EXPLANATION_TOP_N = 5
@@ -92,8 +111,9 @@ def _selected_label(tier: str) -> str:
     return settings.strong_model if tier == "strong" else settings.cheap_model
 
 
-def _explanation(features: RoutingFeatures, policy: str, score: float, threshold: float,
-                 tier: str, *, proxy: bool) -> list[str]:
+def _explanation(
+    features: RoutingFeatures, policy: str, score: float, threshold: float, tier: str, *, proxy: bool
+) -> list[str]:
     score_label = "Heuristic score" if proxy else "Stronger-class probability"
     return [
         f"Language group {features.language_group}; {features.reference_token_count} reference "
@@ -144,12 +164,14 @@ def _logreg_explanation(features: RoutingFeatures, coefficients: dict) -> dict:
         contribution = float(coefficient) * ((float(value) - float(mean)) / float(scale))
         total += contribution
         if abs(contribution) > 1e-12:
-            rows.append({
-                "feature": name,
-                "value": float(value),
-                "contribution": contribution,
-                "direction": "toward_stronger" if contribution > 0 else "toward_economy",
-            })
+            rows.append(
+                {
+                    "feature": name,
+                    "value": float(value),
+                    "contribution": contribution,
+                    "direction": "toward_stronger" if contribution > 0 else "toward_economy",
+                }
+            )
     ranked = sorted(rows, key=lambda row: abs(row["contribution"]), reverse=True)[:EXPLANATION_TOP_N]
     top_sum = sum(row["contribution"] for row in ranked)
     bias = float(coefficients["intercept"])
@@ -166,14 +188,10 @@ def _logreg_explanation(features: RoutingFeatures, coefficients: dict) -> dict:
     }
 
 
-def _occlusion_explanation(features: RoutingFeatures, model, coefficients: dict,
-                           primary: str) -> dict:
+def _occlusion_explanation(features: RoutingFeatures, model, coefficients: dict, primary: str) -> dict:
     """Per-request occlusion for the primary model, using training means."""
-    means = dict(zip(MODEL_FEATURE_NAMES,
-                     (float(value) for value in coefficients["scaler_mean"])))
-    base_score, items = occlusion_items(
-        model, features.vector(), means, features.language_group
-    )
+    means = dict(zip(MODEL_FEATURE_NAMES, (float(value) for value in coefficients["scaler_mean"])))
+    base_score, items = occlusion_items(model, features.vector(), means, features.language_group)
     return {
         "method": "occlusion_vs_training_mean",
         "model": primary,
@@ -203,8 +221,7 @@ class RoutingService:
             primary = str(metrics["primary_model"])
             if primary not in models:
                 raise ValueError(f"Primary model {primary!r} has no saved artifact.")
-            thresholds = {policy: float(metrics["policies"][policy]["threshold"])
-                          for policy in POLICIES}
+            thresholds = {policy: float(metrics["policies"][policy]["threshold"]) for policy in POLICIES}
             if not all(0.0 <= value <= 1.0 for value in thresholds.values()):
                 raise ValueError("Policy thresholds must lie in [0, 1].")
             coefficients, coefficients_error = None, None
@@ -215,13 +232,17 @@ class RoutingService:
                 _validate_coefficients(coefficients)
             except Exception as exc:
                 coefficients_error = (
-                    "Logistic-regression coefficient artifact unavailable or invalid "
-                    f"({type(exc).__name__})."
+                    f"Logistic-regression coefficient artifact unavailable or invalid ({type(exc).__name__})."
                 )
-            return Bundle(models=models, metrics=metrics, primary=primary,
-                          thresholds=thresholds, metrics_path=metrics_path,
-                          coefficients=coefficients,
-                          coefficients_error=coefficients_error), None
+            return Bundle(
+                models=models,
+                metrics=metrics,
+                primary=primary,
+                thresholds=thresholds,
+                metrics_path=metrics_path,
+                coefficients=coefficients,
+                coefficients_error=coefficients_error,
+            ), None
         except Exception as exc:  # Any load failure degrades to the labelled fallback.
             return None, (
                 f"Trained routing artifact unavailable or invalid "
@@ -233,10 +254,7 @@ class RoutingService:
         if self.bundle is None:
             raise RuntimeError("Trained models are not loaded.")
         row = [features.vector()]
-        return {
-            name: float(model.predict_proba(row)[0][1])
-            for name, model in self.bundle.models.items()
-        }
+        return {name: float(model.predict_proba(row)[0][1]) for name, model in self.bundle.models.items()}
 
     def explanation_detail(self, features: RoutingFeatures) -> dict:
         """Per-request top influences for the primary model, or an explicit unavailable object."""
@@ -248,8 +266,7 @@ class RoutingService:
         if self.bundle.primary == "logistic_regression":
             if self.bundle.coefficients is None:
                 return _unavailable_explanation(
-                    self.bundle.coefficients_error
-                    or "Logistic-regression coefficients are unavailable."
+                    self.bundle.coefficients_error or "Logistic-regression coefficients are unavailable."
                 )
             return _logreg_explanation(features, self.bundle.coefficients)
         if self.bundle.coefficients is None:
@@ -315,8 +332,9 @@ class RoutingService:
         """Exact starter formula; only used when trained artifacts cannot be loaded."""
         scored_text = compressed_text or text
         features = extract_features(scored_text)
-        score = min(1.0, 0.15 + features.code_mix_ratio * 0.45
-                    + min(features.reference_token_count, 120) / 220)
+        score = min(
+            1.0, 0.15 + features.code_mix_ratio * 0.45 + min(features.reference_token_count, 120) / 220
+        )
         threshold = STUB_THRESHOLDS[policy]
         tier = "strong" if score >= threshold else "cheap"
         # Same three keys as the trained path so the response shape stays stable; the

@@ -1,17 +1,34 @@
 """Authored routing dataset checks; labels are fixtures, not measured model correctness."""
+
 from __future__ import annotations
 
 import json
 from collections import Counter, defaultdict
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.unit]
+
 DATASET = Path(__file__).resolve().parents[1] / "data/fixtures/routing_prompts.jsonl"
 
 REQUIRED_KEYS = {"id", "text", "label", "group", "rubric", "source"}
 LABELS = {"economy", "stronger"}
 GROUPS = {"english", "hinglish", "hindi", "mixed_script"}
-TAGS = {"reasoning", "math", "code", "analysis", "nuance", "constraints",
-        "smalltalk", "lookup", "translate", "rewrite", "format", "yes_no"}
+TAGS = {
+    "reasoning",
+    "math",
+    "code",
+    "analysis",
+    "nuance",
+    "constraints",
+    "smalltalk",
+    "lookup",
+    "translate",
+    "rewrite",
+    "format",
+    "yes_no",
+}
 
 
 def rows() -> list[dict]:

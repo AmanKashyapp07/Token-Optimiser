@@ -4,25 +4,22 @@
 3. Circuit Breaker & Automatic Fallback Resilience
 4. Granular Stage Latency Telemetry & End-to-End Gateway Processing
 """
+
 from __future__ import annotations
 
 import time
 
 import pytest
-from fastapi.testclient import TestClient
 
-from gateway.app import app
 from gateway.core.resilience import CircuitBreaker, CircuitState, get_circuit_breaker
 
-
-@pytest.fixture(scope="module")
-def client():
-    return TestClient(app)
+pytestmark = [pytest.mark.resilience]
 
 
 # ==============================================================================
 # 1. Distributed Request Tracing & Observability
 # ==============================================================================
+
 
 def test_request_id_generation_and_propagation(client):
     """Every request must carry a unique X-Request-ID and response time header."""
@@ -45,6 +42,7 @@ def test_custom_client_request_id_preserved(client):
 # ==============================================================================
 # 2. Sliding-Window Rate Limiting
 # ==============================================================================
+
 
 def test_rate_limiter_allows_normal_traffic(client):
     """Normal traffic within quota receives X-RateLimit headers."""
@@ -76,6 +74,7 @@ def test_rate_limiter_blocks_burst_with_http_429(client):
 # ==============================================================================
 # 3. Circuit Breaker & Resilience Pattern
 # ==============================================================================
+
 
 def test_circuit_breaker_state_transitions():
     """Circuit breaker trips to OPEN on threshold failures, and degrades gracefully."""
@@ -126,6 +125,7 @@ def test_circuit_breaker_state_transitions():
 # ==============================================================================
 # 4. Unified Gateway Processing Pipeline (POST /api/v1/gateway/process)
 # ==============================================================================
+
 
 def test_gateway_process_full_pipeline_normal(client):
     """End-to-end execution across Cache -> Compression -> Routing -> Output Capping."""

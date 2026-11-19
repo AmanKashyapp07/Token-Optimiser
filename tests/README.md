@@ -30,7 +30,7 @@ tests/
 │
 ├── frontend/                      # Frontend Vitest test suites (located in src/)
 │   ├── src/app/smoke.test.ts
-│   ├── src/app/unified_integration.test.ts
+│   ├── src/app/unifiedIntegration.test.ts
 │   ├── src/features/insights/insights.test.ts
 │   ├── src/features/compression/client.test.ts
 │   ├── src/features/routing/helpers.test.ts

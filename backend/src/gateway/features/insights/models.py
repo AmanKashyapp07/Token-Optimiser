@@ -6,6 +6,7 @@ Includes:
 - Feature extraction, 2D PCA reduction, and K-Means clustering over request history.
 - All models run on CPU using scikit-learn.
 """
+
 from __future__ import annotations
 
 import json
@@ -52,8 +53,10 @@ def _extract_regression_features(item: dict[str, Any]) -> list[float]:
     return [inp, is_hinglish, is_hindi, has_fmt, has_max, eff_max]
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class PredictorArtifacts:
+    """Trained statistical and performance artifacts for the Ridge token length model."""
+
     model: Ridge
     feature_names: list[str]
     mae: float
@@ -76,7 +79,14 @@ def get_length_predictor() -> PredictorArtifacts:
         dummy.fit([[10, 0, 0, 0, 0, 120]], [60])
         return PredictorArtifacts(
             model=dummy,
-            feature_names=["input_tokens", "is_hinglish", "is_hindi", "has_format_constraint", "has_max_tokens", "effective_max_tokens"],
+            feature_names=[
+                "input_tokens",
+                "is_hinglish",
+                "is_hindi",
+                "has_format_constraint",
+                "has_max_tokens",
+                "effective_max_tokens",
+            ],
             mae=0.0,
             r2=1.0,
             sample_count=1,
@@ -182,18 +192,20 @@ def analyze_clusters(extra_items: list[dict[str, Any]] | None = None) -> dict[st
     items = list(load_request_fixtures())
     if extra_items:
         for ex in extra_items:
-            items.append({
-                "id": f"live-{ex.get('id', len(items))}",
-                "text": ex.get("text", ""),
-                "language": ex.get("language", "en"),
-                "route": ex.get("result", {}).get("route", "economy"),
-                "cache_hit": ex.get("result", {}).get("cache_hit", False),
-                "compressed": ex.get("result", {}).get("compressed", False),
-                "input_tokens": ex.get("result", {}).get("input_tokens", len(ex.get("text", "").split())),
-                "output_tokens": ex.get("result", {}).get("output_tokens", 50),
-                "format_constraint": ex.get("result", {}).get("format_constraint"),
-                "max_tokens_set": ex.get("result", {}).get("max_tokens"),
-            })
+            items.append(
+                {
+                    "id": f"live-{ex.get('id', len(items))}",
+                    "text": ex.get("text", ""),
+                    "language": ex.get("language", "en"),
+                    "route": ex.get("result", {}).get("route", "economy"),
+                    "cache_hit": ex.get("result", {}).get("cache_hit", False),
+                    "compressed": ex.get("result", {}).get("compressed", False),
+                    "input_tokens": ex.get("result", {}).get("input_tokens", len(ex.get("text", "").split())),
+                    "output_tokens": ex.get("result", {}).get("output_tokens", 50),
+                    "format_constraint": ex.get("result", {}).get("format_constraint"),
+                    "max_tokens_set": ex.get("result", {}).get("max_tokens"),
+                }
+            )
 
     if len(items) < 3:
         return {"points": [], "clusters": [], "explained_variance": [0.0, 0.0]}
@@ -233,21 +245,23 @@ def analyze_clusters(extra_items: list[dict[str, Any]] | None = None) -> dict[st
     points = []
     for i, item in enumerate(items):
         lbl = int(labels[i])
-        points.append({
-            "id": item.get("id", f"p-{i}"),
-            "text": item.get("text", "")[:40] + ("..." if len(item.get("text", "")) > 40 else ""),
-            "language": item.get("language", "en"),
-            "route": item.get("route", "economy"),
-            "cache_hit": bool(item.get("cache_hit")),
-            "compressed": bool(item.get("compressed")),
-            "input_tokens": int(item.get("input_tokens", 0)),
-            "output_tokens": int(item.get("output_tokens", 0)),
-            "format_constraint": item.get("format_constraint"),
-            "pc1": round(float(coords[i, 0]), 3),
-            "pc2": round(float(coords[i, 1]), 3),
-            "cluster": lbl,
-            "cluster_label": cluster_names.get(lbl, f"Cluster {lbl}"),
-        })
+        points.append(
+            {
+                "id": item.get("id", f"p-{i}"),
+                "text": item.get("text", "")[:40] + ("..." if len(item.get("text", "")) > 40 else ""),
+                "language": item.get("language", "en"),
+                "route": item.get("route", "economy"),
+                "cache_hit": bool(item.get("cache_hit")),
+                "compressed": bool(item.get("compressed")),
+                "input_tokens": int(item.get("input_tokens", 0)),
+                "output_tokens": int(item.get("output_tokens", 0)),
+                "format_constraint": item.get("format_constraint"),
+                "pc1": round(float(coords[i, 0]), 3),
+                "pc2": round(float(coords[i, 1]), 3),
+                "cluster": lbl,
+                "cluster_label": cluster_names.get(lbl, f"Cluster {lbl}"),
+            }
+        )
 
     # Summary by cluster
     summaries = []
@@ -258,15 +272,17 @@ def analyze_clusters(extra_items: list[dict[str, Any]] | None = None) -> dict[st
         avg_in = round(sum(p["input_tokens"] for p in c_points) / len(c_points), 1)
         avg_out = round(sum(p["output_tokens"] for p in c_points) / len(c_points), 1)
         cache_hits = sum(1 for p in c_points if p["cache_hit"])
-        summaries.append({
-            "cluster_id": c,
-            "label": cluster_names.get(c, f"Cluster {c}"),
-            "count": len(c_points),
-            "avg_input_tokens": avg_in,
-            "avg_output_tokens": avg_out,
-            "cache_hits": cache_hits,
-            "description": f"{len(c_points)} requests with avg {avg_out} output tokens.",
-        })
+        summaries.append(
+            {
+                "cluster_id": c,
+                "label": cluster_names.get(c, f"Cluster {c}"),
+                "count": len(c_points),
+                "avg_input_tokens": avg_in,
+                "avg_output_tokens": avg_out,
+                "cache_hits": cache_hits,
+                "description": f"{len(c_points)} requests with avg {avg_out} output tokens.",
+            }
+        )
 
     return {
         "points": points,

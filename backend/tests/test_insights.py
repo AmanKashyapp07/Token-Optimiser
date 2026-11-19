@@ -1,16 +1,12 @@
 """Tests for Aman's Token & Cost Insights feature."""
+
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
 
-from gateway.app import app
 from gateway.features.insights.models import get_length_predictor, load_request_fixtures
 
-
-@pytest.fixture(scope="module")
-def client():
-    return TestClient(app)
+pytestmark = [pytest.mark.integration]
 
 
 def test_tokenize_default_multilingual(client):
@@ -188,4 +184,3 @@ def test_fixtures_integrity():
     predictor = get_length_predictor()
     assert predictor.sample_count >= 15
     assert predictor.mae >= 0.0
-

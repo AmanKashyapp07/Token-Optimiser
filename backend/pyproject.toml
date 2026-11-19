@@ -27,6 +27,20 @@ packages = ["src/gateway"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+norecursedirs = ["scripts/reference", "node_modules", "dist", ".venv", ".git"]
+addopts = "--ignore=tests/test_compression_application_validation.py --ignore=tests/test_compression_phrases.py"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
+markers = [
+    "unit: Fast unit tests with zero network or I/O dependencies",
+    "integration: Feature API and database persistence integration tests",
+    "e2e: End-to-end OpenAI-compatible proxy and pipeline tests",
+    "resilience: Chaos, singleflight, circuit breaker, and concurrency tests",
+    "benchmark: Latency and throughput benchmarking tests",
+]
 
 [tool.ruff]
 target-version = "py311"

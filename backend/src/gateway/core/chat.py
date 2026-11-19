@@ -1,6 +1,20 @@
+"""Unified OpenAI-compatible Chat Completions API and Stage Execution Engine.
+
+Implements /v1/chat/completions (and /api/v1/chat/completions) providing a high-throughput,
+drop-in reverse proxy integrating:
+  Stage 1: Dual-Tier Semantic Caching (Exact + Context-Gated Vector Match)
+  Stage 2: Lexical & CRF Hinglish/Indic Prompt Compaction
+  Stage 3: Cost-Aware Model Routing (Economy / Balanced / Quality Policies)
+  Stage 4: ML Adaptive Token Budgeting (Ridge Regression + 95% Confidence Bounds)
+  Stage 5: Singleflight Request Coalescing & Circuit-Breaker Guarded Inference
+  Stage 6: Real-time Microsecond Stage Telemetry & Bounded Execution Traces
+"""
+
 from __future__ import annotations
 
 import json
+import logging
+import threading
 import time
 import uuid
 from collections import OrderedDict
@@ -21,24 +35,98 @@ from gateway.features.compression.service import get_service as get_compression_
 from gateway.features.routing.service import get_service as get_routing_service
 from gateway.pricing import tier_cost_usd
 
+logger = logging.getLogger("gateway.chat")
+
 # Mount endpoints at both /v1 (standard OpenAI SDK compatibility) and /api/v1 (internal gateway convention)
 router = APIRouter(tags=["unified-inference-api"])
 
-# Global bounded LRU cache of recent 200 execution traces for sub-millisecond retrieval
-_RECENT_TRACES: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+# ==============================================================================
+# Thread-Safe Bounded LRU Trace Store
+# ==============================================================================
+
+
+class TraceStore:
+    """Thread-safe bounded in-memory LRU store for execution waterfall traces."""
+
+    def __init__(self, capacity: int = 200) -> None:
+        self._capacity = capacity
+        self._traces: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def record(self, trace_id: str, request_id: str, trace_data: dict[str, Any]) -> None:
+        """Stores trace indexing by both trace_id and request_id with FIFO/LRU eviction."""
+        with self._lock:
+            while len(self._traces) >= self._capacity:
+                self._traces.popitem(last=False)
+            self._traces[trace_id] = trace_data
+            self._traces[request_id] = trace_data
+
+    def get(self, identifier: str) -> dict[str, Any] | None:
+        """Retrieves trace by trace_id or request_id."""
+        with self._lock:
+            return self._traces.get(identifier)
+
+    def clear(self) -> None:
+        """Clears all stored traces."""
+        with self._lock:
+            self._traces.clear()
+
+    @property
+    def raw_dict(self) -> OrderedDict[str, dict[str, Any]]:
+        """Provides direct reference for backward compatibility."""
+        return self._traces
+
+
+_TRACE_STORE = TraceStore(capacity=200)
+_RECENT_TRACES = _TRACE_STORE.raw_dict
+
+
+class TraceStore:
+    """Thread-safe bounded in-memory LRU store for execution waterfall traces."""
+
+    def __init__(self, capacity: int = 200) -> None:
+        self._capacity = capacity
+        self._traces: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def record(self, trace_id: str, request_id: str, trace_data: dict[str, Any]) -> None:
+        """Stores trace indexing by both trace_id and request_id with FIFO/LRU eviction."""
+        with self._lock:
+            while len(self._traces) >= self._capacity:
+                self._traces.popitem(last=False)
+            self._traces[trace_id] = trace_data
+            self._traces[request_id] = trace_data
+
+    def get(self, identifier: str) -> dict[str, Any] | None:
+        """Retrieves trace by trace_id or request_id."""
+        with self._lock:
+            return self._traces.get(identifier)
+
+    def clear(self) -> None:
+        """Clears all stored traces."""
+        with self._lock:
+            self._traces.clear()
+
+    @property
+    def raw_dict(self) -> OrderedDict[str, dict[str, Any]]:
+        """Provides direct reference for backward compatibility."""
+        return self._traces
+
+
+_TRACE_STORE = TraceStore(capacity=200)
+_RECENT_TRACES = _TRACE_STORE.raw_dict
 
 
 def _record_trace_in_memory(trace_id: str, request_id: str, trace_data: dict[str, Any]) -> None:
     """Stores trace with FIFO/LRU eviction capped strictly at 200 items."""
-    while len(_RECENT_TRACES) >= 200:
-        _RECENT_TRACES.popitem(last=False)
-    _RECENT_TRACES[trace_id] = trace_data
-    _RECENT_TRACES[request_id] = trace_data
+    _TRACE_STORE.record(trace_id, request_id, trace_data)
 
 
 # ==============================================================================
 # OpenAI-Compatible Schemas
 # ==============================================================================
+
 
 class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant"] = "user"
@@ -104,24 +192,12 @@ class ChatCompletionResponse(BaseModel):
 
 
 # ==============================================================================
-# Unified Inference Execution Engine
+# Pipeline Stage Decompositions
 # ==============================================================================
 
-async def execute_chat_completion(
-    payload: ChatCompletionRequest,
-    request: Request,
-    response: Response,
-    cache_scope: str = "public",
-) -> ChatCompletionResponse:
-    start_time = time.perf_counter()
-    request_id = getattr(request.state, "request_id", uuid.uuid4().hex)
-    trace_id = f"trace-{uuid.uuid4().hex[:12]}"
-    settings = get_settings()
-    provider = Provider(settings)
-    store = Store(settings.database_path)
-    stages: list[StageSpan] = []
 
-    # 1. Preserve full conversation history & system prompt
+def _extract_conversation(payload: ChatCompletionRequest) -> tuple[str, str | None, str]:
+    """Extracts the primary user prompt, optional system instruction, and multi-turn context."""
     user_messages = [m for m in payload.messages if m.role == "user"]
     if not user_messages:
         raise HTTPException(status_code=422, detail="At least one user message is required.")
@@ -130,14 +206,89 @@ async def execute_chat_completion(
     system_messages = [m.content for m in payload.messages if m.role == "system"]
     system_instruction = "\n".join(system_messages) if system_messages else None
 
-    # Multi-turn context preservation
     if len(payload.messages) > 1:
-        context_turns = []
-        for m in payload.messages:
-            context_turns.append(f"{m.role.capitalize()}: {m.content}")
+        context_turns = [f"{m.role.capitalize()}: {m.content}" for m in payload.messages]
         compiled_query = "\n".join(context_turns)
     else:
         compiled_query = raw_prompt
+
+    return raw_prompt, system_instruction, compiled_query
+
+
+def _format_cached_answer(answer: str, format_constraint: str) -> str:
+    """Formats cached answer to conform with requested output constraint."""
+    if format_constraint == "JSON only" and not answer.strip().startswith("{"):
+        brief = answer.split(".")[0] if "." in answer else answer[:80]
+        return json.dumps({"status": "success", "answer": brief.strip()})
+    elif format_constraint == "3 bullets" and not answer.strip().startswith(("•", "-", "*")):
+        parts = [s.strip() for s in answer.replace("\n", " ").split(".") if s.strip()]
+        if len(parts) >= 3:
+            return f"• {parts[0]}.\n• {parts[1]}.\n• {parts[2]}."
+        elif parts:
+            return "\n".join(f"• {p}." for p in parts)
+    return answer
+
+
+# ==============================================================================
+# Pipeline Stage Decompositions
+# ==============================================================================
+
+
+def _extract_conversation(payload: ChatCompletionRequest) -> tuple[str, str | None, str]:
+    """Extracts the primary user prompt, optional system instruction, and multi-turn context."""
+    user_messages = [m for m in payload.messages if m.role == "user"]
+    if not user_messages:
+        raise HTTPException(status_code=422, detail="At least one user message is required.")
+    raw_prompt = user_messages[-1].content
+
+    system_messages = [m.content for m in payload.messages if m.role == "system"]
+    system_instruction = "\n".join(system_messages) if system_messages else None
+
+    if len(payload.messages) > 1:
+        context_turns = [f"{m.role.capitalize()}: {m.content}" for m in payload.messages]
+        compiled_query = "\n".join(context_turns)
+    else:
+        compiled_query = raw_prompt
+
+    return raw_prompt, system_instruction, compiled_query
+
+
+def _format_cached_answer(answer: str, format_constraint: str) -> str:
+    """Formats cached answer to conform with requested output constraint."""
+    if format_constraint == "JSON only" and not answer.strip().startswith("{"):
+        brief = answer.split(".")[0] if "." in answer else answer[:80]
+        return json.dumps({"status": "success", "answer": brief.strip()})
+    elif format_constraint == "3 bullets" and not answer.strip().startswith(("•", "-", "*")):
+        parts = [s.strip() for s in answer.replace("\n", " ").split(".") if s.strip()]
+        if len(parts) >= 3:
+            return f"• {parts[0]}.\n• {parts[1]}.\n• {parts[2]}."
+        elif parts:
+            return "\n".join(f"• {p}." for p in parts)
+    return answer
+
+
+# ==============================================================================
+# Unified Inference Execution Engine
+# ==============================================================================
+
+
+async def execute_chat_completion(
+    payload: ChatCompletionRequest,
+    request: Request,
+    response: Response,
+    cache_scope: str = "public",
+) -> ChatCompletionResponse:
+    """Executes full optimization pipeline synchronously returning ChatCompletionResponse."""
+    start_time = time.perf_counter()
+    request_id = getattr(request.state, "request_id", uuid.uuid4().hex)
+    trace_id = f"trace-{uuid.uuid4().hex[:12]}"
+    settings = get_settings()
+    provider = Provider(settings)
+    store = Store(settings.database_path)
+    stages: list[StageSpan] = []
+
+    # 1. Parse conversation history
+    raw_prompt, system_instruction, compiled_query = _extract_conversation(payload)
 
     # --------------------------------------------------------------------------
     # STAGE 1: Dual-Tier Semantic Cache
@@ -173,16 +324,7 @@ async def execute_chat_completion(
 
     if cache_hit and cached_entry:
         total_lat = round((time.perf_counter() - start_time) * 1000, 2)
-        answer_text = cached_entry.get("answer", "")
-        if payload.format_constraint == "JSON only" and not answer_text.strip().startswith("{"):
-            brief = answer_text.split(".")[0] if "." in answer_text else answer_text[:80]
-            answer_text = json.dumps({"status": "success", "answer": brief.strip()})
-        elif payload.format_constraint == "3 bullets" and not answer_text.strip().startswith(("•", "-", "*")):
-            parts = [s.strip() for s in answer_text.replace("\n", " ").split(".") if s.strip()]
-            if len(parts) >= 3:
-                answer_text = f"• {parts[0]}.\n• {parts[1]}.\n• {parts[2]}."
-            elif parts:
-                answer_text = "\n".join(f"• {p}." for p in parts)
+        answer_text = _format_cached_answer(cached_entry.get("answer", ""), payload.format_constraint)
 
         finish_reason = "stop"
         if payload.max_tokens is not None and payload.max_tokens > 0:
@@ -191,7 +333,6 @@ async def execute_chat_completion(
                 finish_reason = "length"
 
         comp_tokens = provider.counter.count(answer_text)
-
         trace = ExecutionTrace(
             trace_id=trace_id,
             request_id=request_id,
@@ -222,7 +363,9 @@ async def execute_chat_completion(
                 "cache_hit": True,
                 "compressed": False,
                 "cost_usd": 0.0,
-                "cost_saved_usd": round(tier_cost_usd("cheap", provider.counter.count(raw_prompt), comp_tokens), 6),
+                "cost_saved_usd": round(
+                    tier_cost_usd("cheap", provider.counter.count(raw_prompt), comp_tokens), 6
+                ),
                 "answer_source": f"cache:{cached_entry.get('match_type')}",
                 "fallback_applied": False,
             },
@@ -313,7 +456,7 @@ async def execute_chat_completion(
     )
 
     # --------------------------------------------------------------------------
-    # STAGE 5: Output Capping & Provider Inference Behind Circuit Breaker
+    # STAGE 5: Provider Inference Behind Circuit Breaker & Singleflight
     # --------------------------------------------------------------------------
     t_stage = time.perf_counter()
     circuit_breaker = get_circuit_breaker()
@@ -327,7 +470,9 @@ async def execute_chat_completion(
 
     # Singleflight Coalescing Key for non-streaming calls
     coalescer = get_request_coalescer()
-    coalesce_key = f"infer:{chosen_model}:{effective_max_tokens}:{payload.format_constraint}:{hash(augmented_prompt)}"
+    coalesce_key = (
+        f"infer:{chosen_model}:{effective_max_tokens}:{payload.format_constraint}:{hash(augmented_prompt)}"
+    )
 
     async def _do_inference() -> tuple[Generation, bool, dict[str, Any]]:
         async def primary_provider_call():
@@ -352,7 +497,6 @@ async def execute_chat_completion(
             out.model = settings.cheap_model
             return out
 
-        # Circuit breaker directly wraps provider inference
         return await circuit_breaker.async_execute(primary_provider_call, fallback_provider_call)
 
     # Execute with singleflight coalescing
@@ -391,7 +535,7 @@ async def execute_chat_completion(
     )
 
     # --------------------------------------------------------------------------
-    # STAGE 5: Cost Accounting & Financial Telemetry
+    # STAGE 6: Cost Accounting & Financial Telemetry
     # --------------------------------------------------------------------------
     active_tier = "cheap" if fallback_applied else selected_tier
     cost_actual = tier_cost_usd(active_tier, generation.prompt_tokens, generation.completion_tokens)
@@ -498,7 +642,9 @@ async def stream_chat_completion(
     chosen_model = payload.model if payload.model and payload.model != "auto" else settings.cheap_model
 
     # Stream chunks
-    async for chunk in provider.stream(raw_prompt, chosen_model, max_tokens=payload.max_tokens, temperature=payload.temperature):
+    async for chunk in provider.stream(
+        raw_prompt, chosen_model, max_tokens=payload.max_tokens, temperature=payload.temperature
+    ):
         chunk_data = {
             "id": cmpl_id,
             "object": "chat.completion.chunk",
@@ -536,6 +682,7 @@ async def stream_chat_completion(
 # HTTP Route Declarations
 # ==============================================================================
 
+
 @router.post("/v1/chat/completions")
 @router.post("/api/v1/chat/completions")
 async def chat_completions(
@@ -544,12 +691,15 @@ async def chat_completions(
     response: Response,
     cache_scope: str = Header(default="public", alias="X-Cache-Scope"),
 ):
-    """OpenAI-compatible unified inference endpoint integrating the full 4-stage optimization pipeline."""
+    """OpenAI-compatible unified inference endpoint integrating the full 5-stage optimization pipeline."""
     if payload.stream:
         return StreamingResponse(
             stream_chat_completion(payload, cache_scope),
             media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "X-Request-ID": getattr(request.state, "request_id", uuid.uuid4().hex)},
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Request-ID": getattr(request.state, "request_id", uuid.uuid4().hex),
+            },
         )
     return await execute_chat_completion(payload, request, response, cache_scope)
 
@@ -557,8 +707,9 @@ async def chat_completions(
 @router.get("/api/v1/traces/{trace_or_request_id}")
 def get_trace(trace_or_request_id: str) -> dict[str, Any]:
     """Retrieve full stage execution trace for any request ID or trace ID."""
-    if trace_or_request_id in _RECENT_TRACES:
-        return _RECENT_TRACES[trace_or_request_id]
+    cached = _TRACE_STORE.get(trace_or_request_id)
+    if cached is not None:
+        return cached
 
     # Search in SQLite store
     settings = get_settings()
@@ -568,10 +719,15 @@ def get_trace(trace_or_request_id: str) -> dict[str, Any]:
         for row in rows:
             try:
                 data = json.loads(row[0])
-                if data.get("trace_id") == trace_or_request_id or data.get("request_id") == trace_or_request_id:
+                if (
+                    data.get("trace_id") == trace_or_request_id
+                    or data.get("request_id") == trace_or_request_id
+                ):
                     if "trace" in data:
                         return data["trace"]
             except Exception:
                 continue
 
-    raise HTTPException(status_code=404, detail=f"Execution trace not found for identifier '{trace_or_request_id}'.")
+    raise HTTPException(
+        status_code=404, detail=f"Execution trace not found for identifier '{trace_or_request_id}'."
+    )

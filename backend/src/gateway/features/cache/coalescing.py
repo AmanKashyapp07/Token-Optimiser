@@ -1,28 +1,28 @@
+"""Request coalescing (Singleflight pattern) engine for Token Optimiser.
+
+Prevents cache stampedes and eliminates redundant upstream model inference by merging
+concurrent in-flight executions for identical cache keys into a single leader task.
+Followers await the leader's completion without hanging or blocking.
+"""
+
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, Coroutine
+import logging
+from typing import Any, Callable, Coroutine, TypeVar
 
+from gateway.core.exceptions import CoalescingError, LeaderExecutionError
 
-class CoalescingError(Exception):
-    """Base error for singleflight coalescing operations."""
-    pass
+logger = logging.getLogger("gateway.coalescing")
 
+T = TypeVar("T")
 
-class LeaderExecutionError(CoalescingError):
-    """Raised on follower requests when the in-flight leader execution fails.
-
-    Attributes:
-        key: The deduplication key for the coalesced group.
-        original_error: The underlying exception raised by the leader.
-        leader_failed: Always True, identifying this request as a coalesced follower.
-    """
-
-    def __init__(self, key: str, original_error: BaseException) -> None:
-        self.key = key
-        self.original_error = original_error
-        self.leader_failed = True
-        super().__init__(f"Singleflight leader execution failed for key '{key}': {original_error}")
+__all__ = [
+    "CoalescingError",
+    "LeaderExecutionError",
+    "RequestCoalescer",
+    "get_request_coalescer",
+]
 
 
 class RequestCoalescer:
@@ -39,7 +39,7 @@ class RequestCoalescer:
     """
 
     def __init__(self) -> None:
-        self._in_flight: dict[str, asyncio.Future] = {}
+        self._in_flight: dict[str, asyncio.Future[Any]] = {}
         self._lock = asyncio.Lock()
         self._total_requests: int = 0
         self._coalesced_requests: int = 0
@@ -48,15 +48,12 @@ class RequestCoalescer:
 
     @property
     def active_in_flight(self) -> int:
+        """Returns the number of currently executing leader keys."""
         return len(self._in_flight)
 
     def get_metrics(self) -> dict[str, Any]:
-        """Returns runtime singleflight deduplication telemetry."""
-        hit_ratio = (
-            (self._coalesced_requests / self._total_requests)
-            if self._total_requests > 0
-            else 0.0
-        )
+        """Returns runtime singleflight deduplication telemetry and hit ratios."""
+        hit_ratio = (self._coalesced_requests / self._total_requests) if self._total_requests > 0 else 0.0
         return {
             "total_requests": self._total_requests,
             "coalesced_requests": self._coalesced_requests,
@@ -81,12 +78,16 @@ class RequestCoalescer:
     async def do(
         self,
         key: str,
-        coro_fn: Callable[[], Coroutine[Any, Any, Any]],
-    ) -> tuple[Any, bool]:
+        coro_fn: Callable[[], Coroutine[Any, Any, T]],
+    ) -> tuple[T, bool]:
         """Executes coro_fn if key is not already active; otherwise waits for active future.
 
+        Args:
+            key: Deterministic cache or execution key used for deduplication.
+            coro_fn: Async zero-argument factory callable for the primary task.
+
         Returns:
-            (result, was_coalesced: bool)
+            Tuple of (result: T, was_coalesced: bool).
 
         Raises:
             LeaderExecutionError: If a coalesced follower was awaiting a leader that failed.
@@ -134,4 +135,5 @@ _GLOBAL_COALESCER = RequestCoalescer()
 
 
 def get_request_coalescer() -> RequestCoalescer:
+    """Returns the process-wide RequestCoalescer singleton instance."""
     return _GLOBAL_COALESCER

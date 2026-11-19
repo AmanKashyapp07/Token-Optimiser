@@ -2,18 +2,14 @@
 
 These checks do not estimate semantic accuracy, provider cost or throughput.
 """
+
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
-from gateway.app import app
 from gateway.features.compression.service import CompressionService, SAMPLES, get_service
 
-
-@pytest.fixture(scope="module")
-def client():
-    return TestClient(app)
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.mark.parametrize("sample", SAMPLES, ids=lambda sample: sample["id"])
@@ -35,11 +31,20 @@ def test_real_method_output(client, sample, method):
 
 
 # Verbatim literal fragments covered by the upstream safety-span implementation.
-@pytest.mark.parametrize("literal", [
-    "user@example.com", "https://example.com/help", "Rs. 2,500", "`index out of range`",
-    "[1, 2, 2, 3]", '"daily nest-change evidence"', "2x + 3 = 7",
-    "```python\nx = 2\nprint(x)\n```", "+91 98765 43210",
-])
+@pytest.mark.parametrize(
+    "literal",
+    [
+        "user@example.com",
+        "https://example.com/help",
+        "Rs. 2,500",
+        "`index out of range`",
+        "[1, 2, 2, 3]",
+        '"daily nest-change evidence"',
+        "2x + 3 = 7",
+        "```python\nx = 2\nprint(x)\n```",
+        "+91 98765 43210",
+    ],
+)
 @pytest.mark.parametrize("method", ["heuristic", "crf"])
 def test_protected_literals_preserved(literal, method):
     text = f"yaar basically {literal} ko change mat karo"
@@ -47,15 +52,22 @@ def test_protected_literals_preserved(literal, method):
     assert literal in result["compressed"]
     assert result["protected_preserved"]
     assert any(span["text"] == literal for span in result["protected_spans"])
-    assert all(text[span["start"]:span["end"]] == span["text"] for span in result["protected_spans"])
+    assert all(text[span["start"] : span["end"]] == span["text"] for span in result["protected_spans"])
 
 
-@pytest.mark.parametrize("text,guard", [
-    ("wifi nahi chal raha hai", "nahi"), ("assignment submit nahin hua", "nahin"),
-    ("mat karo ye", "mat"), ("never do this again", "never"),
-    ("phone charge nhi ho rha", "nhi"), ("wifi nai chal rha", "nai"),
-    ("kya wifi chal raha hai", "kya"), ("kab tak deadline hai", "kab"),
-])
+@pytest.mark.parametrize(
+    "text,guard",
+    [
+        ("wifi nahi chal raha hai", "nahi"),
+        ("assignment submit nahin hua", "nahin"),
+        ("mat karo ye", "mat"),
+        ("never do this again", "never"),
+        ("phone charge nhi ho rha", "nhi"),
+        ("wifi nai chal rha", "nai"),
+        ("kya wifi chal raha hai", "kya"),
+        ("kab tak deadline hai", "kab"),
+    ],
+)
 def test_crf_surface_guards(text, guard):
     result = get_service().analyze(text, "crf")
     assert guard in result["compressed"].split()
@@ -75,11 +87,17 @@ def test_nonempty_edge_cases(text, method):
     assert get_service().analyze(text, method)["compressed"].strip()
 
 
-@pytest.mark.parametrize("payload", [
-    {"text": ""}, {"text": "  \n "}, {"text": "x" * 12001},
-    {"text": "wifi", "method": "invented"}, {"text": "wifi", "budget": 0.05},
-    {"text": "wifi", "budget": 1.1},
-])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"text": ""},
+        {"text": "  \n "},
+        {"text": "x" * 12001},
+        {"text": "wifi", "method": "invented"},
+        {"text": "wifi", "budget": 0.05},
+        {"text": "wifi", "budget": 1.1},
+    ],
+)
 def test_invalid_requests(client, payload):
     assert client.post("/api/v1/compression/analyze", json=payload).status_code == 422
 
@@ -130,7 +148,7 @@ def test_actual_removed_offsets_and_greeting_audit():
     result = get_service().analyze(text)
     assert not result["compressed"].startswith("hello")
     assert result["removed_spans"]  # Upstream does not log greeting drops in this path.
-    assert all(text[span["start"]:span["end"]] == span["text"] for span in result["removed_spans"])
+    assert all(text[span["start"] : span["end"]] == span["text"] for span in result["removed_spans"])
 
 
 def test_three_samples_and_six_comparisons(client):

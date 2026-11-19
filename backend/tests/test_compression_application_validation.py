@@ -1,4 +1,5 @@
 """Offline checks for the application matrix, private bundle and finite timers."""
+
 from __future__ import annotations
 
 import base64
@@ -19,7 +20,13 @@ from application_matrix import check_result, run_matrix  # noqa: E402
 from kaggle_pilot import authored_cases, verified_source_data  # noqa: E402
 from launch_application_batch import build_source, snapshot  # noqa: E402
 from overnight_monitor import (  # noqa: E402
-    CHECK_COUNT, INTERVAL_SECONDS, due_slots, normalize_status, run_command, schedule, version_label,
+    CHECK_COUNT,
+    INTERVAL_SECONDS,
+    due_slots,
+    normalize_status,
+    run_command,
+    schedule,
+    version_label,
 )
 
 from gateway.app import app  # noqa: E402
@@ -70,8 +77,10 @@ def test_windows_second_precision_does_not_skip_fired_slot():
     assert due_slots(times, fired - timedelta(minutes=1)) == []
 
 
-@pytest.mark.parametrize("value, expected", [(0, "QUEUED"), (1, "RUNNING"), (2, "COMPLETE"),
-                                             (3, "ERROR"), ("COMPLETE", "COMPLETE"), (99, "UNKNOWN")])
+@pytest.mark.parametrize(
+    "value, expected",
+    [(0, "QUEUED"), (1, "RUNNING"), (2, "COMPLETE"), (3, "ERROR"), ("COMPLETE", "COMPLETE"), (99, "UNKNOWN")],
+)
 def test_kaggle_status_normalization(value, expected):
     assert normalize_status(value) == expected
 

@@ -58,7 +58,7 @@ def main():
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dst)
         manifest["files"].append({"source": src.relative_to(args.source).as_posix(), "destination": relative.as_posix(), "sha256": hashlib.sha256(dst.read_bytes()).hexdigest()})
-    output = ROOT / "docs/source-manifest.json"
+    output = ROOT / "backend/data/manifests/source-manifest.json"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(f"Imported {len(pairs)} files from Research@{commit[:12]}")

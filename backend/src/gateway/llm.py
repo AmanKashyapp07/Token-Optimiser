@@ -1,11 +1,23 @@
+"""Legacy research LLM client adapter for Token Optimiser.
+
+Maintains backward-compatible client interfaces for imported research modules
+(m2_compressor, m4_router) while utilizing modern pooled HTTP connections and strict types.
+"""
+
 from __future__ import annotations
 
+import json
+import logging
 import uuid
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, AsyncIterator
 
 import httpx
 
+from gateway.core.http import get_http_client
 from gateway.schemas import ChatMessage, Usage
+
+logger = logging.getLogger("gateway.llm")
 
 try:
     from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -26,17 +38,19 @@ except Exception:  # tenacity not installed
         return deco
 
 
+@dataclass(slots=True)
 class LLMResult:
-    def __init__(
-        self, content: str, usage: Usage, model: str, raw: dict[str, Any] | None = None
-    ) -> None:
-        self.content = content
-        self.usage = usage
-        self.model = model
-        self.raw = raw or {}
+    """Container for completion output and token telemetry from legacy clients."""
+
+    content: str
+    usage: Usage
+    model: str
+    raw: dict[str, Any] = field(default_factory=dict)
 
 
 class BaseLLMClient:
+    """Abstract base class for legacy research clients."""
+
     model: str = ""
 
     async def chat(
@@ -52,15 +66,14 @@ class BaseLLMClient:
         messages: list[ChatMessage] | list[dict[str, Any]],
         temperature: float = 1.0,
         max_tokens: int | None = None,
-    ):  # type: ignore[no-untyped-def]
+    ) -> AsyncIterator[str]:
         result = await self.chat(messages, temperature, max_tokens)
         for token in result.content.split(" "):
             yield token + " "
-        _ = max_tokens
 
 
 class MockLLMClient(BaseLLMClient):
-    """Deterministic, offline client used when GATEWAY_DRY_RUN=true (and in tests)."""
+    """Deterministic, offline client used for testing and dry-run execution."""
 
     def __init__(self, model: str, canned: str | None = None) -> None:
         self.model = model
@@ -78,68 +91,30 @@ class MockLLMClient(BaseLLMClient):
             content = f"[mock:{self.model}] {last}"
         else:
             content = self.canned
-        # Realistic token counts for cost estimation (was 1, now heuristic)
+
         prompt_tokens = len(content.split())
         completion_tokens = max(1, len(content.split()) // 2 + 1)
         self.last_usage = {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens}
         return LLMResult(
             content=content,
-            usage=Usage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=0),
+            usage=Usage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+            ),
             model=self.model,
         )
 
 
 class OpenAIClient(BaseLLMClient):
-    """Async OpenAI-compatible chat client (OpenAI, Groq, Ollama/vLLM)."""
-
-    async def stream_chat(  # type: ignore[override]
-        self,
-        messages: list[ChatMessage] | list[dict[str, Any]],
-        temperature: float = 1.0,
-        max_tokens: int | None = None,
-    ):  # type: ignore[no-untyped-def]
-        import json as _json
-
-        payload: dict[str, Any] = {
-            "model": self.model,
-            "messages": self._dump(messages),
-            "temperature": temperature,
-            "stream": True,
-            "stream_options": {"include_usage": True},
-        }
-        if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
-
-        self.last_usage: dict[str, Any] | None = None
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            async with client.stream(
-                "POST", f"{self.base_url}/chat/completions", headers=self._headers, json=payload
-            ) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    line = line.strip()
-                    if not line or not line.startswith("data:"):
-                        continue
-                    data = line[5:].strip()
-                    if data == "[DONE]":
-                        break
-                    try:
-                        obj = _json.loads(data)
-                        if "usage" in obj and obj["usage"]:
-                            self.last_usage = obj["usage"]
-                        delta = obj.get("choices", [{}])[0].get("delta", {}) if obj.get("choices") else {}
-                        content = delta.get("content")
-                        if content:
-                            yield content
-                    except Exception:
-                        continue
+    """Async OpenAI-compatible chat client using pooled HTTP connections."""
 
     def __init__(self, model: str, base_url: str, api_key: str = "", timeout: float = 60.0) -> None:
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-        self._headers = headers
+        self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        self.last_usage: dict[str, Any] | None = None
 
     @staticmethod
     def _dump(messages: list[ChatMessage] | list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -150,6 +125,50 @@ class OpenAIClient(BaseLLMClient):
             else:
                 out.append(m.model_dump(exclude_none=True))
         return out
+
+    async def stream_chat(  # type: ignore[override]
+        self,
+        messages: list[ChatMessage] | list[dict[str, Any]],
+        temperature: float = 1.0,
+        max_tokens: int | None = None,
+    ) -> AsyncIterator[str]:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": self._dump(messages),
+            "temperature": temperature,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+
+        self.last_usage = None
+        client = get_http_client()
+        async with client.stream(
+            "POST",
+            f"{self.base_url}/chat/completions",
+            headers=self._headers,
+            json=payload,
+            timeout=self.timeout,
+        ) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                line = line.strip()
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(data)
+                    if "usage" in obj and obj["usage"]:
+                        self.last_usage = obj["usage"]
+                    delta = obj.get("choices", [{}])[0].get("delta", {}) if obj.get("choices") else {}
+                    content = delta.get("content")
+                    if content:
+                        yield content
+                except Exception:
+                    continue
 
     @_httpx_retry()
     async def chat(
@@ -166,12 +185,12 @@ class OpenAIClient(BaseLLMClient):
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(
-                f"{self.base_url}/chat/completions", headers=self._headers, json=payload
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        client = get_http_client()
+        resp = await client.post(
+            f"{self.base_url}/chat/completions", headers=self._headers, json=payload, timeout=self.timeout
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
         choice = data["choices"][0]
         content = choice["message"].get("content") or choice["message"].get("reasoning") or ""
@@ -189,10 +208,12 @@ def build_client(
     canned: str | None = None,
     timeout: float = 30.0,
 ) -> BaseLLMClient:
+    """Builds appropriate LLM client instance based on dry_run mode."""
     if dry_run:
         return MockLLMClient(model=model, canned=canned)
     return OpenAIClient(model=model, base_url=base_url, api_key=api_key, timeout=timeout)
 
 
 def new_task_id() -> str:
+    """Generates a unique task identifier prefixed with 'cmg-'."""
     return "cmg-" + uuid.uuid4().hex[:16]

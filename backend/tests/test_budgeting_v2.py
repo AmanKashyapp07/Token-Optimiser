@@ -3,57 +3,104 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from gateway.app import app
 from gateway.core.budgeting import AdaptiveTokenBudgeter, TokenBudgetResult
 
 
-@pytest.fixture
-def client():
-    return TestClient(app)
-
-
-def test_adaptive_token_budgeter_allocation():
-    """Verify that AdaptiveTokenBudgeter computes hat_y, margin, and allocated budget."""
-    budgeter = AdaptiveTokenBudgeter(floor_tokens=35, ceiling_tokens=250)
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("prompt", "language", "floor", "ceiling"),
+    [
+        ("Explain the difference between TCP and UDP transport protocols.", "en", 35, 250),
+        ("Bhai mujhe hostel room allot kaise karwana hai?", "hi", 25, 300),
+        ("def quicksort(arr): return arr", "code", 30, 200),
+    ],
+)
+def test_adaptive_token_budgeter_allocation(prompt: str, language: str, floor: int, ceiling: int):
+    """Verify that AdaptiveTokenBudgeter computes hat_y, margin, and allocated budget within bounds."""
+    budgeter = AdaptiveTokenBudgeter(floor_tokens=floor, ceiling_tokens=ceiling)
     res = budgeter.allocate(
-        prompt="Explain the difference between TCP and UDP transport protocols.",
-        language="en",
+        prompt=prompt,
+        language=language,
         format_constraint="none",
     )
 
     assert isinstance(res, TokenBudgetResult)
     assert res.predicted_tokens > 0
     assert res.prediction_interval_margin > 0
-    assert res.allocated_budget >= 35
-    assert res.allocated_budget <= 250
+    assert res.allocated_budget >= floor
+    assert res.allocated_budget <= ceiling
     assert res.strategy == "ml_adaptive"
     assert res.truncation_risk_warning is False
 
 
-def test_adaptive_budgeter_with_format_constraints():
-    """Verify that format constraints dynamically shift the allocated budget."""
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("format_constraint", "expected_detail"),
+    [
+        ("none", "none"),
+        ("1 sentence", "1 sentence"),
+        ("3 bullets", "3 bullets"),
+        ("code only", "code only"),
+        ("json", "json"),
+    ],
+)
+def test_adaptive_budgeter_with_format_constraints(format_constraint: str, expected_detail: str):
+    """Verify that format constraints dynamically shift the allocated budget metadata."""
     budgeter = AdaptiveTokenBudgeter()
-    res_none = budgeter.allocate("Where is the assignment submission link?", format_constraint="none")
-    res_bullets = budgeter.allocate("Where is the assignment submission link?", format_constraint="3 bullets")
+    res = budgeter.allocate(
+        "Where is the assignment submission link?",
+        format_constraint=format_constraint,
+    )
 
-    assert res_none.strategy == "ml_adaptive"
-    assert res_bullets.strategy == "ml_adaptive"
-    assert res_bullets.details["format_constraint"] == "3 bullets"
+    assert res.strategy == "ml_adaptive"
+    assert res.details["format_constraint"] == expected_detail
+    assert res.allocated_budget >= budgeter.floor_tokens
 
 
-def test_user_override_truncation_warning():
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("user_cap", "expect_warning"),
+    [
+        (10, True),  # Starvation cap triggers truncation risk warning
+        (500, False),  # Ample cap proceeds safely
+    ],
+)
+def test_user_override_truncation_warning(user_cap: int, expect_warning: bool):
     """When a user specifies a static cap far below the predicted requirement, flag risk."""
     budgeter = AdaptiveTokenBudgeter()
-    # Complex query with tiny 10-token cap
     res = budgeter.allocate(
         prompt="Explain modern operating system virtual memory paging, page tables, and TLB misses.",
-        user_max_tokens=10,
+        user_max_tokens=user_cap,
     )
     assert res.strategy == "user_override"
-    assert res.allocated_budget == 10
-    assert res.truncation_risk_warning is True
+    assert res.truncation_risk_warning is expect_warning
+    if expect_warning:
+        assert res.allocated_budget == user_cap
+    else:
+        assert res.allocated_budget <= user_cap
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("input_tokens", "factor", "floor", "expected"),
+    [
+        (20, 1.5, 40, 40),  # Floor clamp
+        (100, 1.5, 40, 150),  # Linear scaling
+        (0, 2.0, 50, 50),  # Zero tokens floor
+        (300, 1.0, 20, 300),  # Exact product
+    ],
+)
+def test_heuristic_vs_ml_budgeter_methods(input_tokens: int, factor: float, floor: int, expected: int):
+    """Verify static heuristic and uniform budget calculation baselines."""
+    budgeter = AdaptiveTokenBudgeter()
+    h_budget = budgeter.static_heuristic_budget(input_tokens=input_tokens, factor=factor, floor=floor)
+    assert h_budget == expected
+
+    u_budget = budgeter.static_uniform_budget(cap=60)
+    assert u_budget == 60
+
+
+@pytest.mark.integration
 def test_chat_completions_adaptive_budgeting_stage(client: TestClient):
     """Calling /v1/chat/completions without max_tokens activates adaptive token budgeting."""
     payload = {
@@ -81,16 +128,3 @@ def test_chat_completions_adaptive_budgeting_stage(client: TestClient):
     optim = data["optimisation"]
     assert optim["budget_strategy"] == "ml_adaptive"
     assert optim["allocated_max_tokens"] >= 35
-
-
-def test_heuristic_vs_ml_budgeter_methods():
-    """Verify static heuristic and uniform budget calculation baselines."""
-    budgeter = AdaptiveTokenBudgeter()
-    h_budget = budgeter.static_heuristic_budget(input_tokens=20, factor=1.5, floor=40)
-    assert h_budget == 40  # floor applied
-
-    h_budget_large = budgeter.static_heuristic_budget(input_tokens=100, factor=1.5, floor=40)
-    assert h_budget_large == 150
-
-    u_budget = budgeter.static_uniform_budget(cap=60)
-    assert u_budget == 60

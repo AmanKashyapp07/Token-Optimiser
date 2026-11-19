@@ -7,17 +7,12 @@ Verifies that all 4 features:
 4. Insights & Output Capping (Aman)
 integrate smoothly together as a single unified system.
 """
+
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
 
-from gateway.app import app
-
-
-@pytest.fixture(scope="module")
-def client():
-    return TestClient(app)
+pytestmark = [pytest.mark.e2e]
 
 
 def test_unified_service_health(client):

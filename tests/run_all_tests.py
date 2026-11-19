@@ -6,7 +6,6 @@ graphics, progress indicators, and noise filtering.
 """
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
 import sys
@@ -116,9 +115,11 @@ def main() -> int:
                 "-m",
                 "ruff",
                 "check",
+                "backend/src/gateway/core",
                 "backend/src/gateway/features/insights",
                 "backend/src/gateway/features/routing",
                 "backend/src/gateway/features/compression",
+                "backend/src/gateway/features/cache",
                 "backend/tests",
             ],
             lambda out: f"    {DIM}Clean style & imports (0 linting warnings).{RESET}",
@@ -165,7 +166,7 @@ def main() -> int:
     total_stages = len(stages)
 
     for i, (title, cmd, filter_fn) in enumerate(stages, 1):
-        ok, dur, detail = run_stage(i, total_stages, title, cmd, filter_fn)
+        ok, dur, _detail = run_stage(i, total_stages, title, cmd, filter_fn)
         records.append((title, ok, dur))
         if not ok:
             all_ok = False

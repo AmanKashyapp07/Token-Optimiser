@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def snapshot() -> tuple[str, dict]:
-    paths = [ROOT / "backend/pyproject.toml", ROOT / "docs/source-manifest.json"]
+    paths = [ROOT / "backend/pyproject.toml", ROOT / "backend/data/manifests/source-manifest.json"]
     paths += list((ROOT / "backend/src").rglob("*.py"))
     paths += list((ROOT / "backend/src/gateway/lexicons").glob("*.json"))
     paths += list((ROOT / "backend/tests").glob("test_compression*.py"))
@@ -29,7 +29,7 @@ def snapshot() -> tuple[str, dict]:
     paths += [ROOT / "scripts/compression_research" / name for name in
               ("application_matrix.py", "kaggle_pilot.py", "launch_application_batch.py",
                "overnight_monitor.py", "kaggle_api.py")]
-    manifest = json.loads((ROOT / "docs/source-manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((ROOT / "backend/data/manifests/source-manifest.json").read_text(encoding="utf-8"))
     for item in manifest["files"]:
         # The existing application scaffold has its own package docstring.
         # It is snapshot-hashed below, not claimed as an unchanged Research file.

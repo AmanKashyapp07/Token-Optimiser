@@ -3,10 +3,11 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from gateway.app import app
 from gateway.features.compression import evidence as module
 from gateway.features.compression.evidence import get_evidence
 from gateway.features.compression.service import ROOT
+
+pytestmark = [pytest.mark.integration]
 
 
 def test_evidence_is_exact_projection_not_authored_metrics():
@@ -24,16 +25,16 @@ def test_evidence_is_exact_projection_not_authored_metrics():
         assert row["original_accuracy"] == raw["metrics"][row["model"]]["original"]["accuracy"]
 
 
-def test_evidence_includes_failures_and_limits():
+def test_evidence_includes_failures_and_limits(client: TestClient):
     evidence = get_evidence()
     assert "punctuation-only" in evidence["results_markdown"]
     assert "do not claim end-to-end speedup" in evidence["results_markdown"]
     assert "unadjusted" in evidence["interpretation"]
     assert "not rerun locally" in evidence["verification_scope"]
-    assert TestClient(app).get("/api/v1/compression/evidence").status_code == 200
+    assert client.get("/api/v1/compression/evidence").status_code == 200
 
 
-def test_evidence_tampering_fails_closed(tmp_path, monkeypatch):
+def test_evidence_tampering_fails_closed(client: TestClient, tmp_path, monkeypatch):
     source = ROOT / "data/compression_evidence"
     destination = tmp_path / "data/compression_evidence"
     destination.mkdir(parents=True)
@@ -43,4 +44,4 @@ def test_evidence_tampering_fails_closed(tmp_path, monkeypatch):
     monkeypatch.setattr(module, "ROOT", tmp_path)
     with pytest.raises(ValueError, match="fingerprint mismatch"):
         get_evidence()
-    assert TestClient(app).get("/api/v1/compression/evidence").status_code == 503
+    assert client.get("/api/v1/compression/evidence").status_code == 503

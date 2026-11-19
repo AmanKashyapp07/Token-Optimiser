@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "https://github.com/tusharsaharan/code-mixed-gateway"
 COMMIT = "224d609237fcc67b5b83e029a9406e9fb7f51329"
 DESTINATION = Path("backend/scripts/reference/code_mixed_gateway_router")
-MANIFEST = Path("docs/router-source-manifest.json")
+MANIFEST = Path("backend/data/manifests/router-source-manifest.json")
 ATTRIBUTES = b"# IML import metadata: retain exact upstream Git-blob bytes.\n* -text\n"
 SELECTION = (
     "README.md", ".gitignore", "backend/README.md", "backend/pyproject.toml",

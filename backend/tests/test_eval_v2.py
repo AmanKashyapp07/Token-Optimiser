@@ -16,6 +16,8 @@ from gateway.core.eval_engine import (
     score_summarization,
 )
 
+pytestmark = [pytest.mark.unit]
+
 EVAL_DATASET_PATH = Path(__file__).resolve().parents[1] / "data" / "eval" / "eval_suite_v2.jsonl"
 
 
@@ -50,7 +52,9 @@ def test_eval_suite_dataset_integrity():
 def test_category_scoring_functions():
     """Test individual category scoring mechanics for accuracy and syntax."""
     # General knowledge
-    gk_score = score_general_knowledge("Paris is the capital of France on the Seine river.", ["Paris", "Seine"])
+    gk_score = score_general_knowledge(
+        "Paris is the capital of France on the Seine river.", ["Paris", "Seine"]
+    )
     assert gk_score == 1.0
 
     # Coding (valid AST + keyword)
@@ -63,7 +67,9 @@ def test_category_scoring_functions():
     assert score_coding(code_fail, ["def is_palindrome"]) < 1.0
 
     # Reasoning
-    reas_score = score_reasoning("The ball costs $0.05 because x + (x + 1.00) = 1.10.", ["ball costs $0.05", "1.10"])
+    reas_score = score_reasoning(
+        "The ball costs $0.05 because x + (x + 1.00) = 1.10.", ["ball costs $0.05", "1.10"]
+    )
     assert reas_score == 1.0
 
     # Summarization
@@ -79,7 +85,13 @@ def test_category_scoring_functions():
     assert score_json(invalid_json, ["Alice"]) == 0.0
 
     # Unified task evaluation
-    task_sc, details = evaluate_task_score("general_knowledge", "Paris is in France.", "Paris, France", ["Paris", "France"], format_constraint="none")
+    task_sc, details = evaluate_task_score(
+        "general_knowledge",
+        "Paris is in France.",
+        "Paris, France",
+        ["Paris", "France"],
+        format_constraint="none",
+    )
     assert task_sc == 1.0
     assert details["format_adherence"] is True
 
@@ -93,8 +105,8 @@ def test_line_item_cost_accounting():
 
     cost = compute_line_item_cost(p_tokens, c_tokens, tier="cheap", embedding_tokens=e_tokens)
     # Stated rates: $0.075 / MTok input, $0.30 / MTok output, $0.02 / MTok embedding
-    expected_input = (300_000 / 1_000_000) * 0.075    # $0.0225
-    expected_output = (400_000 / 1_000_000) * 0.30     # $0.1200
+    expected_input = (300_000 / 1_000_000) * 0.075  # $0.0225
+    expected_output = (400_000 / 1_000_000) * 0.30  # $0.1200
     expected_embedding = (300_000 / 1_000_000) * 0.02  # $0.0060
     expected_total = expected_input + expected_output + expected_embedding  # $0.1485
 

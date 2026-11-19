@@ -1,4 +1,5 @@
 """Training contract on synthetic data. Real metrics only reproduce authored labels."""
+
 from __future__ import annotations
 
 import json
@@ -9,10 +10,24 @@ import pytest
 from gateway.features.routing.features import MODEL_FEATURE_NAMES
 from gateway.features.routing.training import train_from_jsonl
 
+pytestmark = [pytest.mark.unit]
+
 MODEL_NAMES = {"logistic_regression", "random_forest", "mlp"}
-REQUIRED_KEYS = {"schema_version", "generated_at", "random_seed", "library_versions", "dataset",
-                 "evaluation_method", "feature_names", "models", "primary_model", "threshold",
-                 "policies", "per_group_accuracy", "notes"}
+REQUIRED_KEYS = {
+    "schema_version",
+    "generated_at",
+    "random_seed",
+    "library_versions",
+    "dataset",
+    "evaluation_method",
+    "feature_names",
+    "models",
+    "primary_model",
+    "threshold",
+    "policies",
+    "per_group_accuracy",
+    "notes",
+}
 
 
 def write_dataset(path: Path, rows: int = 60) -> Path:
@@ -21,12 +36,23 @@ def write_dataset(path: Path, rows: int = 60) -> Path:
     for index in range(rows):
         stronger = index % 2 == 0
         group = "english" if index % 4 < 2 else "hinglish"
-        text = (f"Prove that sqrt({index + 2}) is irrational, attempt {index}."
-                if stronger else f"Say hello to person number {index}.")
-        lines.append(json.dumps({"id": f"syn-{index:03d}", "text": text,
-                                 "label": "stronger" if stronger else "economy",
-                                 "group": group, "rubric": ["math"] if stronger else ["smalltalk"],
-                                 "source": "authored"}))
+        text = (
+            f"Prove that sqrt({index + 2}) is irrational, attempt {index}."
+            if stronger
+            else f"Say hello to person number {index}."
+        )
+        lines.append(
+            json.dumps(
+                {
+                    "id": f"syn-{index:03d}",
+                    "text": text,
+                    "label": "stronger" if stronger else "economy",
+                    "group": group,
+                    "rubric": ["math"] if stronger else ["smalltalk"],
+                    "source": "authored",
+                }
+            )
+        )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
@@ -44,7 +70,9 @@ def test_artifact_contract(trained):
     assert metrics["schema_version"] == 1
     assert metrics["feature_names"] == list(MODEL_FEATURE_NAMES)
     assert set(metrics["models"]) == MODEL_NAMES
-    assert metrics["dataset"]["label_source_note"] == "authored fixture labels, not measured model correctness"
+    assert (
+        metrics["dataset"]["label_source_note"] == "authored fixture labels, not measured model correctness"
+    )
     assert (artifacts / "routing_metrics.json").is_file()
     assert (artifacts / "routing_logreg_coefficients.json").is_file()
     for name in MODEL_NAMES:

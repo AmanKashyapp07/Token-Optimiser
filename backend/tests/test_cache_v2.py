@@ -81,6 +81,7 @@ def cache():
     return two_layer
 
 
+@pytest.mark.unit
 def test_context_aware_cache_key_generation():
     """Verify deterministic SHA256 composite compound key calculation."""
     key1 = ContextAwareCacheKey(
@@ -109,33 +110,39 @@ def test_context_aware_cache_key_generation():
     assert key1.compound_key() != key3.compound_key()
 
 
-def test_system_prompt_isolation(cache: TwoLayerContextCache):
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("divergent_system_prompt", "should_hit"),
+    [
+        ("You are a theoretical computer science professor.", False),
+        ("Act as an expert Linux kernel developer.", False),
+        ("You are a kindergarten teacher.", True),
+    ],
+)
+def test_system_prompt_isolation(cache: TwoLayerContextCache, divergent_system_prompt: str, should_hit: bool):
     """Identical query with different system instructions must not produce a false cache hit."""
-    # Seeded with: system_prompt="You are a kindergarten teacher."
-    # Query with identical user prompt but PhD system prompt
     res = cache.lookup(
         query="Explain recursion for young children.",
-        system_prompt="You are a theoretical computer science professor.",
+        system_prompt=divergent_system_prompt,
         scope_id="public",
     )
-    assert res["hit"] is False
-    assert res["match_type"] == "none"
-
-    # Query with matching kindergarten teacher system prompt
-    hit_res = cache.lookup(
-        query="Explain recursion for young children.",
-        system_prompt="You are a kindergarten teacher.",
-        scope_id="public",
-    )
-    assert hit_res["hit"] is True
-    assert hit_res["layer"] == 1  # Exact compound hit
+    assert res["hit"] is should_hit
+    if should_hit:
+        assert res["layer"] == 1
+    else:
+        assert res["match_type"] == "none"
 
 
-def test_programming_language_divergence_rejection(cache: TwoLayerContextCache):
-    """Python vs Java queries must be rejected even with high lexical similarity."""
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "divergent_language",
+    ["Java", "Rust", "Go", "C++"],
+)
+def test_programming_language_divergence_rejection(cache: TwoLayerContextCache, divergent_language: str):
+    """Python vs alternate language queries must be rejected even with high lexical similarity."""
     # Knowledge base has 'Write binary search in Python with code.'
     res = cache.lookup(
-        query="Write binary search in Java with code.",
+        query=f"Write binary search in {divergent_language} with code.",
         scope_id="public",
         threshold_override=0.50,
     )
@@ -143,11 +150,20 @@ def test_programming_language_divergence_rejection(cache: TwoLayerContextCache):
     assert res["match_type"] == "none"
 
 
-def test_temporal_divergence_rejection(cache: TwoLayerContextCache):
-    """Today vs yesterday queries must be rejected by temporal compatibility gate."""
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "divergent_temporal_query",
+    [
+        "What was the stock price of NVIDIA yesterday?",
+        "What will be the stock price of NVIDIA tomorrow?",
+        "What was the stock price of NVIDIA last month?",
+    ],
+)
+def test_temporal_divergence_rejection(cache: TwoLayerContextCache, divergent_temporal_query: str):
+    """Today vs divergent temporal queries must be rejected by temporal compatibility gate."""
     # Knowledge base has 'What is the stock price of NVIDIA today?'
     res = cache.lookup(
-        query="What was the stock price of NVIDIA yesterday?",
+        query=divergent_temporal_query,
         scope_id="public",
         threshold_override=0.50,
     )
@@ -155,6 +171,7 @@ def test_temporal_divergence_rejection(cache: TwoLayerContextCache):
     assert res["match_type"] == "none"
 
 
+@pytest.mark.unit
 def test_tenant_isolation_boundary(cache: TwoLayerContextCache):
     """Tenant-secure entries must never be accessible from public or distinct tenant scopes."""
     res_public = cache.lookup(
@@ -177,6 +194,7 @@ def test_tenant_isolation_boundary(cache: TwoLayerContextCache):
     assert res_authorized["answer"] == "CONFIDENTIAL_SALARY_DATA"
 
 
+@pytest.mark.unit
 def test_layer1_exact_vs_layer2_semantic_routing(cache: TwoLayerContextCache):
     """Layer 1 resolves in O(1) compound lookup; Layer 2 resolves near paraphrases."""
     # Layer 1: Identical normalized string

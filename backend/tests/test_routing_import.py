@@ -1,4 +1,5 @@
 """Import provenance and collision safety; not trained-router accuracy tests."""
+
 from __future__ import annotations
 
 import json
@@ -6,6 +7,8 @@ import sys
 from pathlib import Path
 
 import pytest
+
+pytestmark = [pytest.mark.unit]
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -22,14 +25,22 @@ def test_router_sources_match_pinned_manifest_without_runtime_replacement():
     assert data["runtime_integrated"] is False
     assert data["commit"] == importer.COMMIT
     assert len(data["missing_artifacts"]) == 5
-    assert all(item["destination"].startswith(importer.DESTINATION.as_posix() + "/") for item in data["files"])
-    assert not any(item["destination"] == "backend/src/gateway/modules/m4_router/router.py"
-                   for item in data["files"])
+    assert all(
+        item["destination"].startswith(importer.DESTINATION.as_posix() + "/") for item in data["files"]
+    )
+    assert not any(
+        item["destination"] == "backend/src/gateway/modules/m4_router/router.py" for item in data["files"]
+    )
 
 
 def test_router_selection_excludes_credentials_databases_and_other_features():
     names = [item["source"] for item in manifest()["files"]]
-    assert importer.selected_paths(names + [".env", "cascade.db", "backend/src/gateway/modules/m2_compressor/x.py"]) == names
+    assert (
+        importer.selected_paths(
+            names + [".env", "cascade.db", "backend/src/gateway/modules/m2_compressor/x.py"]
+        )
+        == names
+    )
     assert not any(name.endswith((".pkl", ".pt", ".db", ".ipynb")) for name in names)
 
 

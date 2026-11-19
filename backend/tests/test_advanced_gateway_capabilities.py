@@ -3,28 +3,25 @@
 2. Task 6: Reliability (TimeoutContext, Exponential Backoff Retries)
 3. Task 7: Benchmarking (Throughput, Latency Percentiles p50/p95/p99, Quality Metrics)
 """
+
 from __future__ import annotations
 
 import asyncio
 import time
 
 import pytest
-from fastapi.testclient import TestClient
 
-from gateway.app import app
 from gateway.core.benchmarking import run_gateway_benchmark
 from gateway.core.resilience import TimeoutContext, async_retry_with_backoff
 from gateway.features.cache.coalescing import RequestCoalescer
 
-
-@pytest.fixture(scope="module")
-def client():
-    return TestClient(app)
+pytestmark = [pytest.mark.integration]
 
 
 # ==============================================================================
 # Task 5: Cache Improvements (Singleflight Coalescing & Invalidation)
 # ==============================================================================
+
 
 @pytest.mark.asyncio
 async def test_cache_coalescing_singleflight_concurrent_deduplication():
@@ -74,6 +71,7 @@ def test_cache_invalidation_api_endpoint(client):
 # Task 6: Reliability & Resilience (Deadlines & Retries)
 # ==============================================================================
 
+
 def test_timeout_context_deadline_tracking():
     """TimeoutContext tracks elapsed time and raises TimeoutError when deadline expires."""
     tc = TimeoutContext(timeout_seconds=0.05)
@@ -103,6 +101,7 @@ async def test_async_retry_with_backoff_transient_recovery():
 # ==============================================================================
 # Task 7: Benchmarking Engine (Throughput, Latency Percentiles, Quality)
 # ==============================================================================
+
 
 @pytest.mark.asyncio
 async def test_run_gateway_benchmark_metrics():

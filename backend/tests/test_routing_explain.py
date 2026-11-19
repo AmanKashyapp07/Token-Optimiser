@@ -1,4 +1,5 @@
 """Occlusion explanations are approximate and per-request; labels are authored fixtures."""
+
 from __future__ import annotations
 
 import pytest
@@ -11,6 +12,8 @@ from gateway.features.routing.explain import (
 )
 from gateway.features.routing.features import MODEL_FEATURE_NAMES
 
+pytestmark = [pytest.mark.unit]
+
 ROWS = 120
 
 
@@ -18,17 +21,14 @@ def make_rows() -> list[list[float]]:
     """Continuous length column, one language flag and a rare binary marker."""
     rows = [[0.0] * len(MODEL_FEATURE_NAMES) for _ in range(ROWS)]
     for index in range(ROWS):
-        rows[index][0] = index / ROWS          # char_length-like, 0.0 .. 0.99
+        rows[index][0] = index / ROWS  # char_length-like, 0.0 .. 0.99
         rows[index][6] = float((index // 2) % 2)  # lang_english
-        rows[index][12] = float(index % 5 == 0)   # has_digits-like, 20% true
+        rows[index][12] = float(index % 5 == 0)  # has_digits-like, 20% true
     return rows
 
 
 def training_means(rows: list[list[float]]) -> dict[str, float]:
-    return {
-        name: sum(row[index] for row in rows) / ROWS
-        for index, name in enumerate(MODEL_FEATURE_NAMES)
-    }
+    return {name: sum(row[index] for row in rows) / ROWS for index, name in enumerate(MODEL_FEATURE_NAMES)}
 
 
 def test_occlusion_contributions_equal_base_minus_occluded_score():
@@ -45,9 +45,7 @@ def test_occlusion_contributions_equal_base_minus_occluded_score():
 
         assert base == pytest.approx(forest.predict_proba([vector])[0][1], abs=1e-12)
         assert 1 <= len(items) <= 5
-        assert items == sorted(
-            items, key=lambda item: abs(item["contribution"]), reverse=True
-        )
+        assert items == sorted(items, key=lambda item: abs(item["contribution"]), reverse=True)
         for item in items:
             occluded = list(vector)
             index = MODEL_FEATURE_NAMES.index(item["feature"])
@@ -55,9 +53,7 @@ def test_occlusion_contributions_equal_base_minus_occluded_score():
             expected = base - forest.predict_proba([occluded])[0][1]
             assert item["contribution"] == pytest.approx(expected, abs=1e-12)
             assert item["value"] == pytest.approx(vector[index])
-            assert item["direction"] == (
-                "toward_stronger" if expected > 0 else "toward_economy"
-            )
+            assert item["direction"] == ("toward_stronger" if expected > 0 else "toward_economy")
 
         # The same request produces the same explanation every time.
         assert occlusion_items(forest, vector, means, "english") == (base, items)

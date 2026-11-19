@@ -7,23 +7,20 @@ Verifies:
 - Stress and sequential execution across diverse multilingual queries.
 - Defensive error handling against malformed inputs and boundary values.
 """
+
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
 
-from gateway.app import app
 from gateway.modules.m1_pipeline.hinglish import code_mix_ratio
 
-
-@pytest.fixture(scope="module")
-def client():
-    return TestClient(app)
+pytestmark = [pytest.mark.e2e]
 
 
 # ---------------------------------------------------------------------------
 # 1. Mathematical & Architectural Invariants
 # ---------------------------------------------------------------------------
+
 
 def test_cost_monotonicity_invariant(client):
     """Invariant: Premium tier cost MUST be strictly greater than Cheap tier cost
@@ -88,12 +85,15 @@ def test_compression_budget_monotonicity_invariant(client, budget):
     assert len(res["compressed"]) <= len(res["original"])
 
 
-@pytest.mark.parametrize("text,expected_range", [
-    ("hello world this is pure english", (0.0, 0.1)),
-    ("mera hostel ka wifi bilkul slow chal raha hai yaar", (0.5, 1.0)),
-    ("ye assignment 2 submit kaise karein online portal par", (0.4, 0.9)),
-    ("किताब वापस करने का क्या नियम है", (0.9, 1.0)),
-])
+@pytest.mark.parametrize(
+    "text,expected_range",
+    [
+        ("hello world this is pure english", (0.0, 0.1)),
+        ("mera hostel ka wifi bilkul slow chal raha hai yaar", (0.5, 1.0)),
+        ("ye assignment 2 submit kaise karein online portal par", (0.4, 0.9)),
+        ("किताब वापस करने का क्या नियम है", (0.9, 1.0)),
+    ],
+)
 def test_code_mix_ratio_bounds(text, expected_range):
     """Invariant: code_mix_ratio must always be bounded in [0.0, 1.0]."""
     score = code_mix_ratio(text)
@@ -106,6 +106,7 @@ def test_code_mix_ratio_bounds(text, expected_range):
 # 2. Safety Spans & Entity Preservation Across Pipeline
 # ---------------------------------------------------------------------------
 
+
 def test_protected_entities_preserved_through_pipeline(client):
     """Safety Invariant: Critical literals (emails, URLs, currencies, numbers)
     must survive compression and pass cleanly into the routing and insights stages.
@@ -113,7 +114,9 @@ def test_protected_entities_preserved_through_pipeline(client):
     literal_email = "support@campus-library.edu"
     literal_url = "https://library.campus.ac.in/renew"
     literal_fee = "Rs. 250"
-    prompt = f"Please contact {literal_email} or visit {literal_url} to pay your pending fine of {literal_fee}."
+    prompt = (
+        f"Please contact {literal_email} or visit {literal_url} to pay your pending fine of {literal_fee}."
+    )
 
     # Stage 1: Compression must not drop protected spans
     comp_res = client.post(
@@ -145,6 +148,7 @@ def test_protected_entities_preserved_through_pipeline(client):
 # ---------------------------------------------------------------------------
 # 3. Dynamic Cache Lifecycle (Insert -> Exact Hit -> Invalidate -> Miss)
 # ---------------------------------------------------------------------------
+
 
 def test_cache_full_lifecycle(client):
     """Verifies that adding a cache entry makes it discoverable, and deleting it restores miss."""
@@ -190,6 +194,7 @@ def test_cache_full_lifecycle(client):
 # ---------------------------------------------------------------------------
 # 4. Sequential Execution Stress Test (20 Diverse Queries)
 # ---------------------------------------------------------------------------
+
 
 def test_sequential_pipeline_stress_execution(client):
     """Stress test: Runs 20 diverse multilingual requests sequentially through the entire pipeline:
@@ -288,14 +293,18 @@ def test_sequential_pipeline_stress_execution(client):
 # 5. Defensive Boundary & Malformed Input Handling
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("bad_payload", [
-    {"text": ""},  # empty text rejected
-    {"text": "   \n\t  "},  # whitespace-only
-    {"text": "x" * 15000},  # exceeds max length
-    {"text": "valid text", "budget": 0.05},  # budget below 0.1
-    {"text": "valid text", "budget": 1.5},  # budget above 1.0
-    {"text": "valid text", "method": "unsupported_magic"},
-])
+
+@pytest.mark.parametrize(
+    "bad_payload",
+    [
+        {"text": ""},  # empty text rejected
+        {"text": "   \n\t  "},  # whitespace-only
+        {"text": "x" * 15000},  # exceeds max length
+        {"text": "valid text", "budget": 0.05},  # budget below 0.1
+        {"text": "valid text", "budget": 1.5},  # budget above 1.0
+        {"text": "valid text", "method": "unsupported_magic"},
+    ],
+)
 def test_compression_input_validation(client, bad_payload):
     """Ensures input errors fail early with HTTP 422 Unprocessable Entity."""
     res = client.post("/api/v1/compression/analyze", json=bad_payload)

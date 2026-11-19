@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from gateway.core.eval_engine import (
     CodeCorrectnessEvaluator,
     FactualRubricEvaluator,
@@ -16,10 +18,13 @@ from gateway.features.cache.context_cache import (
 )
 from gateway.modules.m12_semantic.embeddings import SemanticEmbedder
 
+pytestmark = [pytest.mark.unit]
+
 
 # ==============================================================================
 # 1. Ground-Truth Code Evaluator Tests
 # ==============================================================================
+
 
 def test_code_evaluator_valid_execution():
     code = """
@@ -81,6 +86,7 @@ def is_palindrome(s):
 # 2. Ground-Truth JSON Schema Evaluator Tests
 # ==============================================================================
 
+
 def test_json_evaluator_valid_schema():
     raw_json = '{"student_name": "Alice", "course_code": "CS101", "status": "enrolled", "credits": 4}'
     schema = {"student_name": "str", "course_code": "str", "status": "str", "credits": "number"}
@@ -104,7 +110,7 @@ def test_json_evaluator_missing_required_keys():
 
 
 def test_json_evaluator_markdown_fence_stripping():
-    fenced = "```json\n{\"hostname\": \"node-01\", \"status\": \"healthy\"}\n```"
+    fenced = '```json\n{"hostname": "node-01", "status": "healthy"}\n```'
     schema = {"hostname": "str", "status": "str"}
     res = JSONCorrectnessEvaluator.evaluate(fenced, schema)
     assert res.is_correct is True
@@ -122,6 +128,7 @@ def test_json_evaluator_malformed_syntax():
 # ==============================================================================
 # 3. Ground-Truth Factual Rubric Evaluator Tests
 # ==============================================================================
+
 
 def test_factual_rubric_evaluator_all_present():
     answer = "Albert Einstein published the general theory of relativity in 1915."
@@ -145,6 +152,7 @@ def test_factual_rubric_evaluator_missing_fact():
 # 4. Statistical Wilson Score Confidence Interval Tests
 # ==============================================================================
 
+
 def test_wilson_score_interval_properties():
     # 0 out of 100
     low, high = wilson_score_interval(0, 100)
@@ -166,8 +174,11 @@ def test_wilson_score_interval_properties():
 # 5. Semantic Cache Trap Rejection Tests (430 Trap Dataset Verification)
 # ==============================================================================
 
+
 def test_cache_traps_dataset_structure():
-    trap_file = Path(__file__).resolve().parents[2] / "backend" / "data" / "eval" / "cache_semantic_traps_400.jsonl"
+    trap_file = (
+        Path(__file__).resolve().parents[2] / "backend" / "data" / "eval" / "cache_semantic_traps_400.jsonl"
+    )
     assert trap_file.exists()
     records = []
     with open(trap_file, "r", encoding="utf-8") as f:

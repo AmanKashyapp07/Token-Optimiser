@@ -10,18 +10,26 @@ from gateway.core.providers import Generation, Provider
 from gateway.features.cache import api as cache_api
 from gateway.features.cache.settings import CacheSettings
 
+pytestmark = [pytest.mark.integration]
+
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(cache_api, "get_settings", lambda: SimpleNamespace(
-        database_path=tmp_path / "cache.sqlite3",
-        cache_threshold=0.55,
-        mode="demo",
-        cheap_model="demo-cheap",
-        api_base_url="",
-        api_key="",
-    ))
-    monkeypatch.setattr(cache_api, "get_cache_settings", lambda: CacheSettings(ttl_seconds=60, max_entries=100))
+    monkeypatch.setattr(
+        cache_api,
+        "get_settings",
+        lambda: SimpleNamespace(
+            database_path=tmp_path / "cache.sqlite3",
+            cache_threshold=0.55,
+            mode="demo",
+            cheap_model="demo-cheap",
+            api_base_url="",
+            api_key="",
+        ),
+    )
+    monkeypatch.setattr(
+        cache_api, "get_cache_settings", lambda: CacheSettings(ttl_seconds=60, max_entries=100)
+    )
     return TestClient(app)
 
 
@@ -42,7 +50,9 @@ def test_seed_is_repeatable_and_exact_lookup(client: TestClient):
 
 def test_semantic_lookup_respects_similarity_threshold(client: TestClient):
     client.post("/api/v1/cache/seed")
-    result = client.post("/api/v1/cache/lookup", json={"text": "How can I renew my library book please?"}).json()
+    result = client.post(
+        "/api/v1/cache/lookup", json={"text": "How can I renew my library book please?"}
+    ).json()
     assert result["match_type"] == "semantic"
     assert result["matched_question"] == "How can I renew a library book?"
     assert result["similarity"] >= result["threshold"]
@@ -71,7 +81,9 @@ def test_unrelated_hinglish_prompt_does_not_reuse_an_english_faq(client: TestCli
     assert result["match_type"] == "none"
 
 
-def test_missing_local_embedding_model_keeps_offline_hash_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_missing_local_embedding_model_keeps_offline_hash_backend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     monkeypatch.setattr(
         cache_api,
         "get_cache_settings",
@@ -82,7 +94,9 @@ def test_missing_local_embedding_model_keeps_offline_hash_backend(tmp_path: Path
 
 def test_different_details_are_not_reused(client: TestClient):
     client.post("/api/v1/cache/seed")
-    result = client.post("/api/v1/cache/lookup", json={"text": "Can I change my exam date because I missed the bus?"}).json()
+    result = client.post(
+        "/api/v1/cache/lookup", json={"text": "Can I change my exam date because I missed the bus?"}
+    ).json()
     assert result["hit"] is False
     assert result["match_type"] == "none"
     assert result["answer"] is None
@@ -94,7 +108,10 @@ def test_cache_management_and_counters(client: TestClient):
     client.post("/api/v1/cache/lookup", json={"text": "Can I change my exam date?"})
     stats = client.get("/api/v1/cache/stats").json()
     assert {key: stats[key] for key in ("total_lookups", "exact_hits", "semantic_hits", "misses")} == {
-        "total_lookups": 2, "exact_hits": 1, "semantic_hits": 0, "misses": 1,
+        "total_lookups": 2,
+        "exact_hits": 1,
+        "semantic_hits": 0,
+        "misses": 1,
     }
 
     item_id = client.get("/api/v1/cache/entries").json()["items"][0]["id"]
@@ -181,4 +198,3 @@ def test_cache_entries_and_lookups_are_isolated_by_scope(client: TestClient):
     assert beta_miss["hit"] is False
     assert client.get("/api/v1/cache/stats", headers=alpha).json()["exact_hits"] == 1
     assert client.get("/api/v1/cache/stats", headers=beta).json()["misses"] == 1
-
